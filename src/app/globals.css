@@ -1,26 +1,264 @@
 @import "tailwindcss";
 
+/* ============================================================
+   TORQ DESIGN SYSTEM — globals.css
+   Source: Figma "Design-system-next-gen" (ttMeOupdUylMbf3ouYtCmo)
+   Updated: 2026-04-14
+   ============================================================ */
+
+/* ── Raw CSS custom properties (theme + dark mode) ── */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background-secondary: #fafafc;
+  --background-dark: #18181c;
+  --background-dark-secondary: #303138;
+  --foreground: #090a0b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #18181c;
+    --background-secondary: #303138;
+    --foreground: #fafafc;
   }
 }
 
+/* ── Tailwind v4 theme extension ── */
+@theme inline {
+
+  /* ── Backgrounds ── */
+  --color-background: var(--background);
+  --color-background-secondary: var(--background-secondary);
+  --color-foreground: var(--foreground);
+
+  /* ── Fonts ── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", monospace;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     NEUTRAL / GREY SCALE
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-neutral-0:   #ffffff;
+  --color-neutral-50:  #fafafc;
+  --color-neutral-100: #f5f6fa;
+  --color-neutral-150: #ebecf2;
+  --color-neutral-200: #dddfe6;
+  --color-neutral-250: #cbcdd6;
+  --color-neutral-300: #b0b3bd;
+  --color-neutral-350: #9a9da8;
+  --color-neutral-400: #858894;
+  --color-neutral-450: #777a86;
+  --color-neutral-500: #5d5f6b;
+  --color-neutral-550: #4a4d57;
+  --color-neutral-600: #383a42;
+  --color-neutral-700: #25272d;
+  --color-neutral-750: #25262c;
+  --color-neutral-800: #18181c;
+  --color-neutral-900: #090a0b;
+  --color-neutral-1000: #000000;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     PRIMARY — BRAND BLUE
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-primary-50:  #f0f5ff;
+  --color-primary-100: #e9efff;
+  --color-primary-200: #cadcff;
+  --color-primary-300: #b9ccff;
+  --color-primary-400: #6393fd;
+  --color-primary-500: #2864ff;   /* ← Brand main */
+  --color-primary-600: #4b74c9;
+  --color-primary-700: #083abb;
+  --color-primary-800: #002a99;
+  --color-primary-900: #002177;
+  --color-primary-950: #001755;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — CYAN
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-cyan-50:  #effcff;
+  --color-cyan-100: #e6f9ff;
+  --color-cyan-200: #b7ebf6;
+  --color-cyan-300: #8be3fe;
+  --color-cyan-400: #5ed8ff;
+  --color-cyan-500: #04c0fc;     /* ← Cyan main */
+  --color-cyan-600: #00a0d3;
+  --color-cyan-700: #0082aa;
+  --color-cyan-800: #006382;
+  --color-cyan-900: #004459;
+  --color-cyan-950: #002d3c;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — TEAL
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-teal-50:  #ecfff7;
+  --color-teal-100: #c2ffe6;
+  --color-teal-200: #92f6cd;
+  --color-teal-300: #47eba8;
+  --color-teal-500: #29ca88;     /* ← Teal main */
+  --color-teal-600: #16a86c;
+  --color-teal-700: #007161;
+  --color-teal-900: #00302a;
+  --color-teal-950: #002520;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — GREEN (Neon)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-green-50:  #f5ffd8;
+  --color-green-100: #ecffb7;
+  --color-green-300: #d5ff5c;
+  --color-green-500: #c9ff2e;    /* ← Green main */
+  --color-green-600: #aeea00;
+  --color-green-700: #90c100;
+  --color-green-800: #719800;
+  --color-green-900: #537000;
+  --color-green-950: #354700;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — YELLOW
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-yellow-50:  #fdf8d9;
+  --color-yellow-100: #fff3b7;
+  --color-yellow-200: #ffec8a;
+  --color-yellow-300: #fee87c;
+  --color-yellow-500: #fdd711;   /* ← Yellow main */
+  --color-yellow-600: #ffd600;
+  --color-yellow-700: #eac503;
+  --color-yellow-800: #ad9200;
+  --color-yellow-900: #5c4d00;
+  --color-yellow-950: #322800;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — ORANGE
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-orange-50:  #fff1e1;
+  --color-orange-100: #ffd8b7;
+  --color-orange-200: #ffca9e;
+  --color-orange-300: #ffa052;
+  --color-orange-500: #ff8e2e;   /* ← Orange main */
+  --color-orange-600: #ed6e1c;
+  --color-orange-700: #d66200;
+  --color-orange-800: #bd5800;
+  --color-orange-900: #853d00;
+  --color-orange-950: #5c2a00;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SECONDARY — PURPLE
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-purple-50:  #f4f1ff;
+  --color-purple-100: #ece7ff;
+  --color-purple-200: #ddd4ff;
+  --color-purple-300: #b39eff;
+  --color-purple-500: #9275ff;   /* ← Purple main */
+  --color-purple-600: #7c61e2;
+  --color-purple-700: #674ec5;
+  --color-purple-800: #543da8;
+  --color-purple-900: #422e8a;
+  --color-purple-950: #221650;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     ALERT — RED / ERROR
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-red-50:  #ffefef;
+  --color-red-100: #ffbebe;
+  --color-red-200: #ff9494;
+  --color-red-300: #ff7070;      /* ← Red mid */
+  --color-red-400: #ff4141;
+  --color-red-500: #ea231a;      /* ← Alert main */
+  --color-red-600: #dc0101;
+  --color-red-700: #b30000;
+  --color-red-800: #620000;
+  --color-red-900: #460000;
+  --color-red-950: #390101;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     ALERT — MAGENTA
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --color-magenta-50:  #ffeef4;
+  --color-magenta-100: #fcdde9;
+  --color-magenta-200: #ffc8dd;
+  --color-magenta-300: #ffa2c6;
+  --color-magenta-500: #ff7caf;  /* ← Magenta main */
+  --color-magenta-600: #ff5698;
+  --color-magenta-700: #dd417e;
+  --color-magenta-800: #bb2f65;
+  --color-magenta-900: #991f4f;
+  --color-magenta-950: #48041f;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SEMANTIC ALIASES
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  /* Text */
+  --color-text-primary:   #090a0b;
+  --color-text-secondary: #5d5f6b;
+  --color-text-tertiary:  #9a9da8;
+  --color-text-disabled:  #cbcdd6;
+  --color-text-inverse:   #ffffff;
+
+  /* Surfaces */
+  --color-surface-primary:   #ffffff;
+  --color-surface-secondary: #fafafc;
+  --color-surface-tertiary:  #f5f6fa;
+  --color-surface-dark:      #18181c;
+  --color-surface-dark-2:    #303138;
+
+  /* Borders */
+  --color-border-1: #ebecf2;
+  --color-border-2: #dddfe6;
+  --color-border-3: #cbcdd6;
+  --color-border-strong: #090a0b;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     TYPOGRAPHY
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --font-size-xs:   0.625rem;   /* 10px */
+  --font-size-sm:   0.75rem;    /* 12px */
+  --font-size-base: 0.875rem;   /* 14px */
+  --font-size-md:   1rem;       /* 16px */
+  --font-size-lg:   1.25rem;    /* 20px */
+  --font-size-xl:   1.5rem;     /* 24px */
+  --font-size-2xl:  1.75rem;    /* 28px */
+  --font-size-3xl:  2.25rem;    /* 36px */
+
+  --font-weight-regular:   400;
+  --font-weight-semibold:  600;
+  --font-weight-bold:      700;
+
+  --line-height-tight:   1.29;
+  --line-height-snug:    1.33;
+  --line-height-normal:  1.43;
+  --line-height-relaxed: 1.5;
+  --line-height-loose:   1.71;
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     SPACING
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --spacing-1:  0.25rem;   /* 4px  */
+  --spacing-2:  0.5rem;    /* 8px  */
+  --spacing-4:  1rem;      /* 16px */
+  --spacing-5:  1.25rem;   /* 20px */
+  --spacing-6:  1.5rem;    /* 24px */
+  --spacing-8:  2rem;      /* 32px */
+  --spacing-10: 2.5rem;    /* 40px */
+  --spacing-15: 3.75rem;   /* 60px */
+  --spacing-16: 4rem;      /* 64px */
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     BORDER RADIUS
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+  --radius-sm:   0.25rem;   /* 4px  */
+  --radius-md:   0.5rem;    /* 8px  */
+  --radius-lg:   0.75rem;   /* 12px */
+  --radius-xl:   1rem;      /* 16px */
+  --radius-full: 9999px;
+}
+
+/* ── Base body styles ── */
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
