@@ -1206,6 +1206,14 @@ export default function Home() {
           </div>
         </motion.aside>
 
+        {/* ── Inbox backdrop — closes panel on outside click ── */}
+        {inboxOpen && (
+          <div
+            className="absolute inset-0 z-40"
+            onClick={() => setInboxOpen(false)}
+          />
+        )}
+
         {/* ── Inbox Panel — anchored dynamically after sidebar ── */}
         <motion.div
           animate={{ left: SIDEBAR_W }}
