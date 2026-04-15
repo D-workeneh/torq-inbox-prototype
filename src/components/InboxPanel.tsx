@@ -458,7 +458,7 @@ function MessageRow({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={handleRowClick}
-      className={`relative flex items-start gap-3 px-4 py-3.5 border-b border-[#eeeef2] transition-colors duration-150 ${
+      className={`relative flex items-start gap-3 px-4 py-3.5 transition-colors duration-150 ${
         hasTarget ? 'cursor-pointer' : 'cursor-default'
       } ${hovered ? 'bg-[var(--color-surface-tertiary)]' : 'bg-[var(--color-surface-primary)]'}`}
     >
@@ -485,22 +485,23 @@ function MessageRow({
         </p>
 
         {/* Row 3: body preview — grey, single line */}
-        <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] truncate leading-relaxed mb-2">
+        <p className="text-[var(--font-size-xs)] text-[#777A86] truncate leading-relaxed mb-2">
           {msg.preview}
         </p>
 
         {/* ── Socrates: approval action chip + Approve / Reject buttons ── */}
         {isSocrates && msg.approvalState === 'pending' && (
           <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
-            <Tag color="purple" appearance="bordered" size="md" icon={<ThumbsUp />} className="mb-2.5 w-full !rounded-[var(--radius-sm)]">
-              <span className="truncate">{msg.approvalAction}</span>
-            </Tag>
+            {/* Chip: overflow-hidden + min-w-0 ensure text truncates inside flex */}
+            <div className="flex items-center gap-1.5 mb-2.5 rounded-[var(--radius-sm)] bg-[var(--color-purple-50)] border border-[var(--color-purple-200)] px-2.5 py-1.5 min-w-0 overflow-hidden">
+              <ThumbsUp className="h-3 w-3 text-[var(--color-purple-500)] shrink-0" />
+              <span className="text-[var(--font-size-xs)] text-[var(--color-purple-500)] font-medium truncate min-w-0">{msg.approvalAction}</span>
+            </div>
             <div className="flex items-center gap-2">
-              <Button variant="success" size="sm" fullWidth leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
+              <Button variant="secondary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
                 Approve
               </Button>
-              <Button variant="secondary" size="sm" fullWidth leftIcon={<XCircle />} onClick={() => onReject(msg.id)}
-                className="!text-[var(--color-red-500)] hover:!text-[var(--color-red-500)]">
+              <Button variant="tertiary" size="sm" fullWidth leftIcon={<XCircle />} onClick={() => onReject(msg.id)}>
                 Reject
               </Button>
             </div>
@@ -527,10 +528,10 @@ function MessageRow({
         {/* ── Workspace invite: Accept / Decline buttons ── */}
         {isInvite && msg.inviteState === 'pending' && (
           <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-            <Button variant="primary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
+            <Button variant="secondary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
               Accept
             </Button>
-            <Button variant="secondary" size="sm" fullWidth onClick={() => onDeclineInvite(msg.id)}>
+            <Button variant="tertiary" size="sm" fullWidth onClick={() => onDeclineInvite(msg.id)}>
               Decline
             </Button>
           </div>
@@ -554,7 +555,7 @@ function MessageRow({
         )}
 
         {/* Meta row: severity + workspace */}
-        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
           <SeverityTag level={msg.severity as SeverityLevel} size="sm" />
           <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
             {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}

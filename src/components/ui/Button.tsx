@@ -8,6 +8,8 @@ import { Loader2 } from 'lucide-react';
 export type ButtonVariant =
   | 'primary'   // Blue fill — main CTA
   | 'secondary' // Border + neutral — secondary action
+  | 'tertiary'  // No border, neutral text — lowest emphasis
+  | 'dark'      // Black fill — actions inside notification cards
   | 'danger'    // Red fill — destructive action
   | 'success'   // Teal fill — positive / approve action
   | 'ghost'     // Transparent, blue text — tertiary action
@@ -39,11 +41,25 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     'disabled:bg-[var(--color-neutral-200)] disabled:text-[var(--color-text-disabled)]',
   ].join(' '),
 
+  dark: [
+    'bg-[var(--color-neutral-800)] text-white',
+    'hover:bg-[var(--color-neutral-700)]',
+    'active:bg-[var(--color-neutral-900)]',
+    'disabled:bg-[var(--color-neutral-200)] disabled:text-[var(--color-text-disabled)]',
+  ].join(' '),
+
   secondary: [
     'border border-[var(--color-border-2)] bg-transparent text-[var(--color-text-primary)]',
     'hover:bg-[var(--color-neutral-100)]',
     'active:bg-[var(--color-neutral-150)]',
     'disabled:border-[var(--color-border-1)] disabled:text-[var(--color-text-disabled)] disabled:bg-transparent',
+  ].join(' '),
+
+  tertiary: [
+    'bg-transparent text-[var(--color-text-secondary)]',
+    'hover:bg-[var(--color-neutral-100)] hover:text-[var(--color-text-primary)]',
+    'active:bg-[var(--color-neutral-150)]',
+    'disabled:text-[var(--color-text-disabled)]',
   ].join(' '),
 
   danger: [
