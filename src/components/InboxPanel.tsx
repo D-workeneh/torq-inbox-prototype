@@ -35,7 +35,9 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Tag } from '@/components/ui/Tag';
+import { Tag, SeverityTag } from '@/components/ui/Tag';
+import type { SeverityLevel } from '@/components/ui/Tag';
+import type { TagColor } from '@/components/ui/Tag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,12 +107,12 @@ const SEVERITY_CONFIG: Record<Severity, {
   },
 };
 
-const TYPE_CONFIG: Record<NotifType, { label: string; Icon: React.ElementType; color: string }> = {
-  'workflow-failed':    { label: 'Workflow failed',    Icon: XCircle,   color: '#EA231A' },
-  'workflow-shared':    { label: 'Workflow shared',    Icon: Zap,       color: '#2864FF' },
-  'workspace-invite':   { label: 'Workspace invite',  Icon: UserPlus,  color: '#9275FF' },
-  'case-mention':       { label: 'Case mention',      Icon: AtSign,    color: '#FF8E2E' },
-  'socrates-approval':  { label: 'Approval request',  Icon: ThumbsUp,  color: '#7C5CFC' },
+const TYPE_CONFIG: Record<NotifType, { label: string; Icon: React.ElementType; color: string; tagColor: TagColor }> = {
+  'workflow-failed':    { label: 'Workflow failed',   Icon: XCircle,  color: '#EA231A', tagColor: 'error'   },
+  'workflow-shared':    { label: 'Workflow shared',   Icon: Zap,      color: '#2864FF', tagColor: 'primary' },
+  'workspace-invite':   { label: 'Workspace invite', Icon: UserPlus, color: '#9275FF', tagColor: 'purple'  },
+  'case-mention':       { label: 'Case mention',     Icon: AtSign,   color: '#FF8E2E', tagColor: 'warning' },
+  'socrates-approval':  { label: 'Approval request', Icon: ThumbsUp, color: '#7C5CFC', tagColor: 'purple'  },
 };
 
 type WSItem = { id: string; name: string; isCurrent?: boolean };
@@ -551,11 +553,15 @@ function MessageRow({
           </div>
         )}
 
-        {/* Meta row: type badge + workspace chip */}
-        <div className="flex items-center gap-1.5 mt-1.5">
-          <Tag color="neutral" appearance="subtle" size="sm"
-            className="!rounded-[var(--radius-sm)]"
-            style={{ backgroundColor: `${TYPE_CONFIG[msg.type].color}14`, color: TYPE_CONFIG[msg.type].color } as React.CSSProperties}>
+        {/* Meta row: severity + type badge + workspace chip */}
+        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          <SeverityTag level={msg.severity as SeverityLevel} size="sm" />
+          <Tag
+            color={TYPE_CONFIG[msg.type].tagColor}
+            appearance="subtle"
+            size="sm"
+            icon={<TYPE_CONFIG[msg.type].Icon />}
+          >
             {TYPE_CONFIG[msg.type].label}
           </Tag>
           <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
@@ -1404,16 +1410,9 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
           {/* Inbox active filter chips */}
           {activeFilterCount > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
-              {filter.severities.map((s) => {
-                const cfg = SEVERITY_CONFIG[s];
-                const Icon = cfg.Icon;
-                return (
-                  <Tag key={s} color={SEVERITY_TAG_COLOR[s]} appearance="bordered" size="sm"
-                    icon={<Icon />} onRemove={() => removeSeverityFilter(s)}>
-                    {cfg.label}
-                  </Tag>
-                );
-              })}
+              {filter.severities.map((s) => (
+                <SeverityTag key={s} level={s as SeverityLevel} size="sm" onRemove={() => removeSeverityFilter(s)} />
+              ))}
               {filter.notifTypes.map((id) => {
                 const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
                 const Icon = cfg.Icon;
@@ -1556,16 +1555,9 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                 {/* Archive active filter chips */}
                 {activeFilterCount > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
-                    {filter.severities.map((s) => {
-                      const cfg = SEVERITY_CONFIG[s];
-                      const Icon = cfg.Icon;
-                      return (
-                        <Tag key={s} color={SEVERITY_TAG_COLOR[s]} appearance="bordered" size="sm"
-                          icon={<Icon />} onRemove={() => removeSeverityFilter(s)}>
-                          {cfg.label}
-                        </Tag>
-                      );
-                    })}
+                    {filter.severities.map((s) => (
+                      <SeverityTag key={s} level={s as SeverityLevel} size="sm" onRemove={() => removeSeverityFilter(s)} />
+                    ))}
                     {filter.notifTypes.map((id) => {
                       const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
                       const Icon = cfg.Icon;

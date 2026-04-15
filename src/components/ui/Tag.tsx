@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, AlertOctagon, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,5 +178,55 @@ export function Tag({
         </button>
       )}
     </span>
+  );
+}
+
+// ─── SeverityTag ──────────────────────────────────────────────────────────────
+// Convenience component — maps a severity level to the correct color + icon.
+// Source: Figma "Notification-center" node 5328-57298
+//
+// Usage:
+//   <SeverityTag level="critical" />   → red  + AlertOctagon
+//   <SeverityTag level="high" />       → orange + AlertTriangle
+//   <SeverityTag level="medium" />     → yellow + AlertCircle
+//   <SeverityTag level="low" />        → grey  + Info
+//   <SeverityTag level="info" />       → blue  + Info
+
+export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+type SeverityPreset = { color: TagColor; Icon: React.ElementType; label: string };
+
+const SEVERITY_PRESETS: Record<SeverityLevel, SeverityPreset> = {
+  critical: { color: 'critical', Icon: AlertOctagon,  label: 'Critical' },
+  high:     { color: 'warning',  Icon: AlertTriangle, label: 'High'     },
+  medium:   { color: 'yellow',   Icon: AlertCircle,   label: 'Medium'   },
+  low:      { color: 'neutral',  Icon: Info,          label: 'Low'      },
+  info:     { color: 'info',     Icon: Info,          label: 'Info'     },
+};
+
+export interface SeverityTagProps {
+  level: SeverityLevel;
+  size?: TagSize;
+  /** 'bordered' (default) shows an outline — matches Figma spec */
+  appearance?: TagAppearance;
+  onRemove?: () => void;
+}
+
+/**
+ * Torq Design System — SeverityTag
+ *
+ * Source: Figma "Notification-center" node 5328-57298
+ *
+ * @example
+ * <SeverityTag level="critical" />
+ * <SeverityTag level="high" size="md" />
+ * <SeverityTag level="medium" onRemove={() => {}} />
+ */
+export function SeverityTag({ level, size = 'sm', appearance = 'bordered', onRemove }: SeverityTagProps) {
+  const { color, Icon, label } = SEVERITY_PRESETS[level];
+  return (
+    <Tag color={color} appearance={appearance} size={size} icon={<Icon />} onRemove={onRemove}>
+      {label}
+    </Tag>
   );
 }
