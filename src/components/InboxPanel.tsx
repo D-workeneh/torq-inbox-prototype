@@ -1326,7 +1326,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
             onMouseEnter={() => setHeaderHovered(true)}
             onMouseLeave={() => setHeaderHovered(false)}
           >
-            <span className="text-[var(--font-size-md)] font-bold text-[var(--color-text-primary)] leading-none">
+            <span className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)] leading-none">
               Inbox
             </span>
 
@@ -1526,7 +1526,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                     <ArrowLeft className="h-4 w-4" />
                   </button>
 
-                  <span className="text-[var(--font-size-md)] font-bold text-[var(--color-text-primary)] leading-none">
+                  <span className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)] leading-none">
                     Archived
                   </span>
 
