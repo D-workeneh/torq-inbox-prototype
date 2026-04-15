@@ -357,7 +357,7 @@ function SidebarSection({
       <SidebarTooltip label={section.title}>
         <div className={`flex items-center justify-center rounded-[var(--radius-md)] w-8 h-8 transition-colors ${
           hasActive
-            ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]'
+            ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)]'
             : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
         }`}>
           <SectionIcon className="h-4 w-4 shrink-0" />
@@ -397,7 +397,7 @@ function SidebarSection({
                     onClick={() => onNavigate(item.pageId)}
                     className={`block w-full text-left rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--font-size-sm)] transition-colors ${
                       isActive
-                        ? 'text-[var(--color-primary-500)] font-medium bg-[var(--color-primary-50)]'
+                        ? 'text-[var(--color-text-primary)] font-medium bg-[var(--color-neutral-150)]'
                         : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
                     }`}
                   >
@@ -1128,7 +1128,7 @@ export default function Home() {
             {sidebarCollapsed ? (
               <SidebarTooltip label="Inbox">
                 <button onClick={() => setInboxOpen((o) => !o)}
-                  className={`relative flex items-center justify-center rounded-[var(--radius-md)] w-8 h-8 transition-colors ${inboxOpen ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
+                  className={`relative flex items-center justify-center rounded-[var(--radius-md)] w-8 h-8 transition-colors ${inboxOpen ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
                 >
                   <InboxSidebarIcon className="h-4 w-4" />
                   <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--color-red-500)] px-0.5 text-[9px] font-bold text-white leading-none">10</span>
@@ -1137,7 +1137,7 @@ export default function Home() {
             ) : (
               <div className="px-2 pt-2">
                 <button onClick={() => setInboxOpen((o) => !o)}
-                  className={`flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] transition-colors ${inboxOpen ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
+                  className={`flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] transition-colors ${inboxOpen ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
                 >
                   <span className="relative shrink-0">
                     <InboxSidebarIcon className="h-3.5 w-3.5" />
@@ -1182,11 +1182,11 @@ export default function Home() {
             <div className={`flex items-center border-t border-[var(--color-border-1)] mt-1 ${sidebarCollapsed ? 'justify-center px-2 py-2.5 w-full' : 'gap-2 px-3 py-2.5'}`}>
               {sidebarCollapsed ? (
                 <SidebarTooltip label="David Workeneh">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[var(--font-size-xs)] font-bold text-white cursor-pointer">D</span>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white cursor-pointer">D</span>
                 </SidebarTooltip>
               ) : (
                 <>
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[var(--font-size-xs)] font-bold text-white">D</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white">D</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">David Workeneh</p>
                     <p className="truncate text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">david.workeneh@torq.io</p>
