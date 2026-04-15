@@ -232,7 +232,7 @@ export default function Home() {
 
   return (
     <div className="h-screen w-full bg-[var(--color-surface-primary)] text-[var(--color-text-primary)] font-sans overflow-hidden">
-      <div className="flex h-full">
+      <div className="relative flex h-full">
 
         {/* ── Sidebar ───────────────────────────────────────────────────── */}
         <aside className="w-[220px] shrink-0 border-r border-[var(--color-border-2)] bg-[var(--color-surface-secondary)] flex flex-col h-full overflow-hidden">
@@ -314,8 +314,12 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* ── Inbox Panel (slides in next to sidebar) ───────────────────── */}
-        <InboxPanel isOpen={inboxOpen} onClose={() => setInboxOpen(false)} />
+        {/* ── Inbox Panel — floats over content, anchored after sidebar ── */}
+        <div className="absolute left-[220px] top-0 h-full z-50 flex pointer-events-none">
+          <div className="pointer-events-auto h-full flex">
+            <InboxPanel isOpen={inboxOpen} onClose={() => setInboxOpen(false)} />
+          </div>
+        </div>
 
         {/* ── Main Content — Workflows ──────────────────────────────────── */}
         <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-[var(--color-surface-primary)]">

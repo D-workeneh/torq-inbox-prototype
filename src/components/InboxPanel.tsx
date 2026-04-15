@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsLeft,
+  ArrowLeft,
   Inbox as InboxIcon,
   Archive as ArchiveIcon,
   ArchiveRestore,
@@ -21,6 +22,7 @@ import {
   Info,
   Zap,
   Bell,
+  BellOff,
   Settings2,
   Building2,
   MoreVertical,
@@ -229,6 +231,52 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ];
 
+// ─── Source avatar colors ──────────────────────────────────────────────────
+
+const AVATAR_PALETTE = [
+  { bg: '#2864FF', text: '#fff' }, // brand blue
+  { bg: '#0D9E6A', text: '#fff' }, // teal
+  { bg: '#E07020', text: '#fff' }, // orange
+  { bg: '#7C5CFC', text: '#fff' }, // purple
+  { bg: '#D63A6A', text: '#fff' }, // rose
+  { bg: '#0891B2', text: '#fff' }, // cyan
+  { bg: '#B45309', text: '#fff' }, // amber
+  { bg: '#374151', text: '#fff' }, // slate
+];
+
+function avatarColor(source: string) {
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) hash = source.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+
+// ─── Source Avatar with severity badge ────────────────────────────────────
+
+function SourceAvatar({ source, severity }: { source: string; severity: Severity }) {
+  const color = avatarColor(source);
+  const initials = source.slice(0, 2).toUpperCase();
+  const sev = SEVERITY_CONFIG[severity];
+  const SevIcon = sev.Icon;
+
+  return (
+    <div className="relative shrink-0">
+      {/* Circle avatar */}
+      <div
+        className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold select-none"
+        style={{ backgroundColor: color.bg, color: color.text }}
+      >
+        {initials}
+      </div>
+      {/* Severity badge — bottom-right of avatar */}
+      <span
+        className={`absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] ${sev.bg}`}
+      >
+        <SevIcon className={`h-2.5 w-2.5 ${sev.color}`} strokeWidth={2.5} />
+      </span>
+    </div>
+  );
+}
+
 // ─── Sub-components ────────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: Severity }) {
@@ -248,6 +296,22 @@ function TypeIcon({ type }: { type: MessageType }) {
   const cfg = TYPE_CONFIG[type];
   const Icon = cfg.Icon;
   return <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />;
+}
+
+// ─── Tooltip ──────────────────────────────────────────────────────────────
+
+function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="group/tip relative flex items-center">
+      {children}
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 opacity-0 group-hover/tip:opacity-100 transition-opacity duration-100">
+        <div className="rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 py-1 text-[var(--font-size-xs)] text-white whitespace-nowrap shadow-lg">
+          {label}
+        </div>
+        <div className="mx-auto mt-0.5 h-1.5 w-1.5 rotate-45 bg-[var(--color-neutral-800)]" style={{ marginTop: '-4px', marginLeft: 'calc(50% - 3px)' }} />
+      </div>
+    </div>
+  );
 }
 
 // ─── Empty State ──────────────────────────────────────────────────────────
@@ -304,39 +368,30 @@ function MessageRow({
   onRestore: (id: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const cfg = SEVERITY_CONFIG[msg.severity];
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -6 }}
+      initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20, height: 0, marginBottom: 0 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`relative flex items-start gap-3 px-4 py-3 border-b border-[var(--color-border-1)] cursor-pointer transition-colors duration-150 ${
-        hovered
-          ? 'bg-[var(--color-surface-tertiary)]'
-          : msg.isRead
-          ? 'bg-[var(--color-surface-primary)]'
-          : 'bg-[var(--color-primary-50)]'
+      className={`relative flex items-start gap-3 px-4 py-3.5 border-b border-[var(--color-border-1)] cursor-pointer transition-colors duration-150 ${
+        hovered ? 'bg-[var(--color-surface-tertiary)]' : 'bg-[var(--color-surface-primary)]'
       }`}
     >
-      {/* Unread dot */}
-      <div className="mt-1 flex shrink-0 flex-col items-center gap-1">
-        <span
-          className={`h-2 w-2 rounded-full transition-opacity duration-200 ${cfg.dot} ${
-            msg.isRead ? 'opacity-0' : 'opacity-100'
-          }`}
-        />
-      </div>
+      {/* Avatar + severity badge */}
+      <SourceAvatar source={msg.source} severity={msg.severity} />
 
-      {/* Content */}
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-start justify-between gap-2">
+      {/* Main content */}
+      <div className="min-w-0 flex-1">
+
+        {/* Row 1: title + timestamp with unread dot */}
+        <div className="flex items-start justify-between gap-2 mb-1">
           <p
-            className={`text-[var(--font-size-sm)] leading-snug ${
+            className={`text-[var(--font-size-sm)] leading-snug flex-1 min-w-0 ${
               msg.isRead
                 ? 'font-normal text-[var(--color-text-secondary)]'
                 : 'font-semibold text-[var(--color-text-primary)]'
@@ -344,66 +399,74 @@ function MessageRow({
           >
             {msg.title}
           </p>
-          <span className="shrink-0 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] mt-0.5">
-            {msg.time}
-          </span>
+
+          {/* Timestamp + blue unread dot */}
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+            <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-350)] whitespace-nowrap">
+              {msg.time}
+            </span>
+            {!msg.isRead && (
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)] shrink-0" />
+            )}
+          </div>
         </div>
-        <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] line-clamp-2 leading-relaxed">
+
+        {/* Row 2: preview */}
+        <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] line-clamp-2 leading-relaxed mb-2">
           {msg.preview}
         </p>
-        <div className="flex items-center gap-2 pt-0.5">
+
+        {/* Row 3: severity + workspace */}
+        <div className="flex items-center gap-1.5">
           <SeverityBadge severity={msg.severity} />
-          <span className="flex items-center gap-1 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
-            <TypeIcon type={msg.type} />
-            {msg.source}
-          </span>
-          <span className="flex items-center gap-1 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
-            <Building2 className="h-3 w-3" />
+          <span className="flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-surface-tertiary)] px-1.5 py-0.5 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
+            <Building2 className="h-3 w-3 shrink-0" />
             {msg.workspace}
           </span>
         </div>
       </div>
 
-      {/* Hover actions */}
+      {/* Hover action buttons — icon-only bar, Notion style */}
       <AnimatePresence>
         {hovered && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+            exit={{ opacity: 0, scale: 0.92 }}
             transition={{ duration: 0.1 }}
-            className="absolute right-3 top-3 flex items-center gap-1"
+            className="absolute right-3 top-2.5 flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-1 py-1 shadow-md"
           >
             {view !== 'archive' ? (
               <>
-                {!msg.isRead && (
+                <Tooltip label={msg.isRead ? 'Mark as unread' : 'Mark as read'}>
                   <button
                     onClick={(e) => { e.stopPropagation(); onMarkRead(msg.id); }}
-                    title="Mark as read"
-                    className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-2 py-1 text-[var(--font-size-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
                   >
-                    <Check className="h-3 w-3" />
-                    Read
+                    {msg.isRead
+                      ? <BellOff className="h-3.5 w-3.5" />
+                      : <Check className="h-3.5 w-3.5" />
+                    }
                   </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onArchive(msg.id); }}
-                  title="Send to archive"
-                  className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-2 py-1 text-[var(--font-size-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-                >
-                  <ArchiveIcon className="h-3 w-3" />
-                  Archive
-                </button>
+                </Tooltip>
+                <Tooltip label="Archive">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onArchive(msg.id); }}
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                  >
+                    <ArchiveIcon className="h-3.5 w-3.5" />
+                  </button>
+                </Tooltip>
               </>
             ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRestore(msg.id); }}
-                title="Restore to inbox"
-                className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-2 py-1 text-[var(--font-size-xs)] text-[var(--color-primary-500)] hover:bg-[var(--color-primary-50)] transition-colors font-medium"
-              >
-                <ArchiveRestore className="h-3 w-3" />
-                Restore
-              </button>
+              <Tooltip label="Restore to inbox">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRestore(msg.id); }}
+                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-50)] transition-colors"
+                >
+                  <ArchiveRestore className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
             )}
           </motion.div>
         )}
@@ -850,10 +913,10 @@ function MoreMenu({
         View archive
       </button>
       <div className="my-1 border-t border-[var(--color-border-1)]" />
-      <a href="/settings/notifications" onClick={onClose} className={btnClass}>
+      <button onClick={onClose} className={btnClass}>
         <Settings2 className="h-3.5 w-3.5 shrink-0" />
         Notifications settings
-      </a>
+      </button>
     </motion.div>,
     document.body,
   );
@@ -868,9 +931,12 @@ export interface InboxPanelProps {
 
 export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const [view, setView] = useState<View>('all');
+  const [prevView, setPrevView] = useState<'all' | 'unread'>('all');
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const archiveSearchRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState<FilterState>({ notifTypes: [], severities: [] });
   const [filterOpen, setFilterOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -880,9 +946,14 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const [wsMulti, setWsMulti] = useState<string[]>([]);
   const [wsOpen, setWsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Inbox layer refs
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
   const wsBtnRef = useRef<HTMLButtonElement>(null);
+  // Archive drawer refs (separate — archive unmounting must not clear inbox refs)
+  const archiveFilterBtnRef = useRef<HTMLButtonElement>(null);
+  const archiveMoreBtnRef = useRef<HTMLButtonElement>(null);
+  const archiveWsBtnRef = useRef<HTMLButtonElement>(null);
 
   const wsLabel =
     wsMode === 'all'
@@ -897,7 +968,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
 
   const handleMarkRead = useCallback((id: string) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, isRead: true } : m))
+      prev.map((m) => (m.id === id ? { ...m, isRead: !m.isRead } : m))
     );
   }, []);
 
@@ -945,11 +1016,32 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     return true;
   }
 
-  const visible = messages.filter((m) => {
-    if (view === 'archive') return m.isArchived;
+  function goToArchive() {
+    if (view !== 'archive') setPrevView(view as 'all' | 'unread');
+    setView('archive');
+    setSearch('');
+    setSearchOpen(false);
+    setArchiveSearch('');
+    setTimeout(() => archiveSearchRef.current?.focus(), 80);
+  }
+
+  function goBackFromArchive() {
+    setView(prevView);
+    setArchiveSearch('');
+  }
+
+  const inboxVisible = messages.filter((m) => {
     if (m.isArchived) return false;
     if (view === 'unread' && m.isRead) return false;
     if (search && !m.title.toLowerCase().includes(search.toLowerCase()) && !m.preview.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
+    if (!matchesWorkspace(m)) return false;
+    return true;
+  });
+
+  const archiveVisible = messages.filter((m) => {
+    if (!m.isArchived) return false;
+    if (archiveSearch && !m.title.toLowerCase().includes(archiveSearch.toLowerCase()) && !m.preview.toLowerCase().includes(archiveSearch.toLowerCase())) return false;
     if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
     if (!matchesWorkspace(m)) return false;
     return true;
@@ -972,19 +1064,23 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
         <motion.div
           key="inbox-panel"
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 360, opacity: 1 }}
+          animate={{ width: 400, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-          className="shrink-0 h-full overflow-hidden border-r border-[var(--color-border-2)] bg-[var(--color-surface-primary)] flex flex-col"
-          style={{ minWidth: 0 }}
+          className="relative shrink-0 h-full overflow-hidden bg-[var(--color-surface-primary)] flex flex-col"
+          style={{ minWidth: 0, boxShadow: '8px 0 32px 0 rgba(0,0,0,0.13), 1px 0 0 0 var(--color-border-2)', clipPath: 'inset(0 -60px 0 0)' }}
         >
-          {/* ── Row 1: Title + Workspace chip + collapse + ⋮ ── */}
+
+          {/* ══════════════════════════════════════════════════
+              BASE LAYER — Inbox (always rendered beneath)
+          ══════════════════════════════════════════════════ */}
+
+          {/* Inbox Row 1: Inbox | workspace | collapse | ⋮ */}
           <div
             className="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0"
             onMouseEnter={() => setHeaderHovered(true)}
             onMouseLeave={() => setHeaderHovered(false)}
           >
-            {/* Title */}
             <span className="text-[var(--font-size-md)] font-bold text-[var(--color-text-primary)] leading-none">
               Inbox
             </span>
@@ -997,32 +1093,21 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                 className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-neutral-100)] px-2.5 py-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] transition-colors"
               >
                 <span>{wsLabel}</span>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform duration-150 ${wsOpen ? 'rotate-180' : ''}`}
-                />
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${wsOpen ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {wsOpen && (
-                  <WorkspacePopover
-                    anchorEl={wsBtnRef.current}
-                    mode={wsMode}
-                    selectedSingle={wsSingle}
-                    selectedMulti={wsMulti}
-                    onChange={(m, s, multi) => {
-                      setWsMode(m);
-                      setWsSingle(s);
-                      setWsMulti(multi);
-                    }}
+                  <WorkspacePopover anchorEl={wsBtnRef.current} mode={wsMode} selectedSingle={wsSingle} selectedMulti={wsMulti}
+                    onChange={(m, s, multi) => { setWsMode(m); setWsSingle(s); setWsMulti(multi); }}
                     onClose={() => setWsOpen(false)}
                   />
                 )}
               </AnimatePresence>
             </div>
 
-            {/* Spacer */}
             <div className="flex-1" />
 
-            {/* «« Collapse button — appears on header hover */}
+            {/* Collapse button — appears on header hover */}
             <AnimatePresence>
               {headerHovered && (
                 <motion.button
@@ -1044,86 +1129,68 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               <button
                 ref={moreBtnRef}
                 onClick={() => { setMoreOpen((o) => !o); setFilterOpen(false); setWsOpen(false); }}
-                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${
-                  moreOpen
-                    ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
-                    : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'
-                }`}
+                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
               <AnimatePresence>
                 {moreOpen && (
-                  <MoreMenu
-                    anchorEl={moreBtnRef.current}
-                    onMarkAllRead={handleMarkAllRead}
-                    onArchiveAll={handleArchiveAll}
-                    onArchiveRead={handleArchiveRead}
-                    onViewArchive={() => setView('archive')}
-                    onClose={() => setMoreOpen(false)}
+                  <MoreMenu anchorEl={moreBtnRef.current} onMarkAllRead={handleMarkAllRead}
+                    onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
+                    onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
                   />
                 )}
               </AnimatePresence>
             </div>
           </div>
 
-          {/* ── Row 2: Tabs + Search icon + Filter icon ── */}
-          <div className="flex items-center border-b border-[var(--color-border-2)] px-4 shrink-0">
-            {/* Tabs */}
-            <div className="flex items-center gap-0 flex-1">
-              {([
-                { id: 'all' as const, label: 'All' },
-                { id: 'unread' as const, label: 'Unread', count: unreadCount },
-                { id: 'archive' as const, label: 'Archive' },
-              ]).map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setView(tab.id)}
-                  className={`relative flex items-center gap-1.5 pb-2.5 pt-1 mr-4 text-[var(--font-size-sm)] transition-colors ${
-                    view === tab.id
-                      ? 'font-semibold text-[var(--color-text-primary)]'
-                      : 'font-normal text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
-                  }`}
-                >
-                  {tab.label}
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span className="flex h-4 min-w-[18px] items-center justify-center rounded-full bg-[var(--color-primary-100)] px-1 text-[var(--font-size-xs)] font-semibold text-[var(--color-primary-500)]">
-                      {tab.count}
-                    </span>
-                  )}
-                  {view === tab.id && (
-                    <motion.span
-                      layoutId="tab-underline"
-                      className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[var(--color-text-primary)]"
-                      transition={{ duration: 0.18, ease: 'easeInOut' }}
-                    />
-                  )}
-                </button>
-              ))}
+          {/* Inbox Row 2: Tabs ↔ inline search + filter */}
+          <div className="flex items-center border-b border-[var(--color-border-2)] px-4 shrink-0 min-h-[40px]">
+            <div className="flex-1 overflow-hidden relative">
+              <AnimatePresence mode="wait" initial={false}>
+                {searchOpen ? (
+                  <motion.div key="search-input" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.15, ease: 'easeOut' }} className="flex items-center gap-2 py-2">
+                    <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 shrink-0 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                    <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search all notifications…" className="flex-1 min-w-0 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none" />
+                  </motion.div>
+                ) : (
+                  <motion.div key="tabs" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, ease: 'easeOut' }} className="flex items-center">
+                    {([
+                      { id: 'all' as const, label: 'All' },
+                      { id: 'unread' as const, label: 'Unread', count: unreadCount },
+                    ]).map((tab) => (
+                      <button key={tab.id} onClick={() => setView(tab.id)}
+                        className={`relative flex items-center gap-1.5 pb-2.5 pt-1 mr-4 text-[var(--font-size-sm)] transition-colors ${view === tab.id ? 'font-semibold text-[var(--color-text-primary)]' : 'font-normal text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                      >
+                        {tab.label}
+                        {tab.count !== undefined && tab.count > 0 && (
+                          <span className="flex h-4 min-w-[18px] items-center justify-center rounded-full bg-[var(--color-primary-100)] px-1 text-[var(--font-size-xs)] font-semibold text-[var(--color-primary-500)]">
+                            {tab.count}
+                          </span>
+                        )}
+                        {view === tab.id && (
+                          <motion.span layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[var(--color-text-primary)]" transition={{ duration: 0.18, ease: 'easeInOut' }} />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Search icon */}
-            <button
-              onClick={toggleSearch}
-              className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 transition-colors ${
-                searchOpen
-                  ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
-                  : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'
-              }`}
-            >
-              <Search className="h-4 w-4" />
-            </button>
+            {!searchOpen && (
+              <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+                <Search className="h-4 w-4" />
+              </button>
+            )}
 
-            {/* Filter icon */}
             <div className="relative ml-0.5">
               <button
                 ref={filterBtnRef}
                 onClick={() => { setFilterOpen((o) => !o); setMoreOpen(false); setWsOpen(false); }}
-                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 transition-colors ${
-                  filterOpen || activeFilterCount > 0
-                    ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]'
-                    : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'
-                }`}
+                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
               >
                 <ListFilter className="h-4 w-4" />
                 {activeFilterCount > 0 && (
@@ -1133,63 +1200,22 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                 )}
               </button>
               <AnimatePresence>
-                {filterOpen && (
-                  <FilterPopover
-                    anchorEl={filterBtnRef.current}
-                    filter={filter}
-                    onChange={setFilter}
-                    onClose={() => setFilterOpen(false)}
-                  />
-                )}
+                {filterOpen && <FilterPopover anchorEl={filterBtnRef.current} filter={filter} onChange={setFilter} onClose={() => setFilterOpen(false)} />}
               </AnimatePresence>
             </div>
           </div>
 
-          {/* ── Search input (collapsible) ── */}
-          <AnimatePresence>
-            {searchOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="overflow-hidden shrink-0"
-              >
-                <div className="px-4 py-2 border-b border-[var(--color-border-1)]">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
-                    <input
-                      ref={searchInputRef}
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search messages…"
-                      className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] pl-8 pr-3 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-primary-500)] focus:bg-[var(--color-surface-primary)] transition-colors"
-                    />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Active filter chips ── */}
+          {/* Inbox active filter chips */}
           {activeFilterCount > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
               {filter.severities.map((s) => {
                 const cfg = SEVERITY_CONFIG[s];
                 const Icon = cfg.Icon;
                 return (
-                  <span
-                    key={s}
-                    className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}
-                  >
+                  <span key={s} className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
                     <Icon className="h-3 w-3" />
                     {cfg.label}
-                    <button
-                      onClick={() => removeSeverityFilter(s)}
-                      className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <button onClick={() => removeSeverityFilter(s)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
                   </span>
                 );
               })}
@@ -1197,51 +1223,188 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                 const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
                 const Icon = cfg.Icon;
                 return (
-                  <span
-                    key={id}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-full)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]"
-                  >
+                  <span key={id} className="inline-flex items-center gap-1 rounded-[var(--radius-full)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
                     <Icon className="h-3 w-3" />
                     {cfg.label}
-                    <button
-                      onClick={() => removeNotifTypeFilter(id)}
-                      className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <button onClick={() => removeNotifTypeFilter(id)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
                   </span>
                 );
               })}
-              <button
-                onClick={() => setFilter({ notifTypes: [], severities: [] })}
-                className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors ml-0.5"
-              >
+              <button onClick={() => setFilter({ notifTypes: [], severities: [] })} className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors ml-0.5">
                 Clear all
               </button>
             </div>
           )}
 
-          {/* ── Message List ── */}
+          {/* Inbox message list */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {visible.length === 0 ? (
+            {inboxVisible.length === 0 ? (
               <EmptyState view={view} />
             ) : (
               <motion.div layout>
                 <AnimatePresence mode="popLayout">
-                  {visible.map((msg) => (
-                    <MessageRow
-                      key={msg.id}
-                      msg={msg}
-                      view={view}
-                      onMarkRead={handleMarkRead}
-                      onArchive={handleArchive}
-                      onRestore={handleRestore}
-                    />
+                  {inboxVisible.map((msg) => (
+                    <MessageRow key={msg.id} msg={msg} view={view} onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} />
                   ))}
                 </AnimatePresence>
               </motion.div>
             )}
           </div>
+
+          {/* ══════════════════════════════════════════════════
+              ARCHIVE DRAWER — slides in over the inbox layer
+              Enter / exit: x: '100%' ↔ x: 0  (left → right)
+          ══════════════════════════════════════════════════ */}
+          <AnimatePresence>
+            {view === 'archive' && (
+              <motion.div
+                key="archive-drawer"
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+                className="absolute inset-0 bg-[var(--color-surface-primary)] flex flex-col z-10"
+                style={{ boxShadow: '-4px 0 20px 0 rgba(0,0,0,0.08)' }}
+              >
+                {/* Archive Row 1: ← | Archived | workspace | ⋮ */}
+                <div className="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+                  <button
+                    onClick={goBackFromArchive}
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+
+                  <span className="text-[var(--font-size-md)] font-bold text-[var(--color-text-primary)] leading-none">
+                    Archived
+                  </span>
+
+                  {/* Workspace chip — uses archive-specific ref */}
+                  <div className="relative">
+                    <button
+                      ref={archiveWsBtnRef}
+                      onClick={() => { setWsOpen((o) => !o); setFilterOpen(false); setMoreOpen(false); }}
+                      className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-neutral-100)] px-2.5 py-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] transition-colors"
+                    >
+                      <span>{wsLabel}</span>
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${wsOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    <AnimatePresence>
+                      {wsOpen && (
+                        <WorkspacePopover anchorEl={archiveWsBtnRef.current} mode={wsMode} selectedSingle={wsSingle} selectedMulti={wsMulti}
+                          onChange={(m, s, multi) => { setWsMode(m); setWsSingle(s); setWsMulti(multi); }}
+                          onClose={() => setWsOpen(false)}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <div className="flex-1" />
+
+                  {/* ⋮ More menu — uses archive-specific ref */}
+                  <div className="relative">
+                    <button
+                      ref={archiveMoreBtnRef}
+                      onClick={() => { setMoreOpen((o) => !o); setFilterOpen(false); setWsOpen(false); }}
+                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    <AnimatePresence>
+                      {moreOpen && (
+                        <MoreMenu anchorEl={archiveMoreBtnRef.current} onMarkAllRead={handleMarkAllRead}
+                          onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
+                          onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Archive Row 2: always-visible search + filter */}
+                <div className="flex items-center gap-2 border-b border-[var(--color-border-2)] px-4 py-2.5 shrink-0">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+                  <input
+                    ref={archiveSearchRef}
+                    value={archiveSearch}
+                    onChange={(e) => setArchiveSearch(e.target.value)}
+                    placeholder="Search in archive…"
+                    className="flex-1 min-w-0 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none"
+                  />
+                  {archiveSearch && (
+                    <button onClick={() => setArchiveSearch('')} className="shrink-0 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {/* Filter — uses archive-specific ref */}
+                  <div className="relative shrink-0">
+                    <button
+                      ref={archiveFilterBtnRef}
+                      onClick={() => { setFilterOpen((o) => !o); setMoreOpen(false); setWsOpen(false); }}
+                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                    >
+                      <ListFilter className="h-4 w-4" />
+                      {activeFilterCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[9px] font-bold text-white">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </button>
+                    <AnimatePresence>
+                      {filterOpen && <FilterPopover anchorEl={archiveFilterBtnRef.current} filter={filter} onChange={setFilter} onClose={() => setFilterOpen(false)} />}
+                    </AnimatePresence>
+                  </div>
+                </div>
+
+                {/* Archive active filter chips */}
+                {activeFilterCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
+                    {filter.severities.map((s) => {
+                      const cfg = SEVERITY_CONFIG[s];
+                      const Icon = cfg.Icon;
+                      return (
+                        <span key={s} className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
+                          <Icon className="h-3 w-3" />
+                          {cfg.label}
+                          <button onClick={() => removeSeverityFilter(s)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
+                        </span>
+                      );
+                    })}
+                    {filter.notifTypes.map((id) => {
+                      const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
+                      const Icon = cfg.Icon;
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 rounded-[var(--radius-full)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
+                          <Icon className="h-3 w-3" />
+                          {cfg.label}
+                          <button onClick={() => removeNotifTypeFilter(id)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
+                        </span>
+                      );
+                    })}
+                    <button onClick={() => setFilter({ notifTypes: [], severities: [] })} className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors ml-0.5">
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                {/* Archive message list */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                  {archiveVisible.length === 0 ? (
+                    <EmptyState view="archive" />
+                  ) : (
+                    <motion.div layout>
+                      <AnimatePresence mode="popLayout">
+                        {archiveVisible.map((msg) => (
+                          <MessageRow key={msg.id} msg={msg} view="archive" onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} />
+                        ))}
+                      </AnimatePresence>
+                    </motion.div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
         </motion.div>
       )}
     </AnimatePresence>
