@@ -328,7 +328,7 @@ function NotifAvatar({ msg }: { msg: Message }) {
   }
 
   const color = avatarColor(msg.source);
-  const initials = msg.source.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials = msg.source[0].toUpperCase();
 
   return (
     <div className="relative shrink-0">
