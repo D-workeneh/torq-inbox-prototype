@@ -280,7 +280,7 @@ function getTimeGroup(time: string): string {
 function TimeSectionHeader({ label }: { label: string }) {
   return (
     <div className="px-4 pt-4 pb-1.5">
-      <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide select-none">
+      <span className="text-[var(--font-size-xs)] font-medium select-none" style={{ color: 'var(--color-text-caption)' }}>
         {label}
       </span>
     </div>
@@ -537,7 +537,7 @@ function MessageRow({
         </p>
 
         {/* Row 3: body preview — grey, single line */}
-        <p className="text-[var(--font-size-xs)] truncate leading-relaxed mb-2" style={{ color: '#777A86' }}>
+        <p className="text-[var(--font-size-xs)] truncate leading-relaxed mb-2" style={{ color: 'var(--color-text-caption)' }}>
           {msg.preview}
         </p>
 
