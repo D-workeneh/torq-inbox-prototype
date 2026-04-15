@@ -38,21 +38,25 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
-type MessageType = 'alert' | 'notification' | 'workflow' | 'system';
+type NotifType = 'workflow-failed' | 'workflow-shared' | 'workspace-invite' | 'case-mention' | 'socrates-approval';
 type View = 'all' | 'unread' | 'archive';
-type WorkspaceMode = 'all' | 'single' | 'multi';
-
 interface Message {
   id: string;
-  title: string;
-  preview: string;
-  type: MessageType;
+  type: NotifType;
+  source: string;          // Row 1: sender name (user, "Torq", "Socrates AI")
+  subHeader: string;       // Row 2: action + context, e.g. "Invited you · Torq-dev"
+  preview: string;         // Row 3: body text (grey, truncated 1 line)
   severity: Severity;
   time: string;
   isRead: boolean;
   workspace: string;
-  source: string;
   isArchived: boolean;
+  targetPage?: string;     // page to navigate to on row click
+  // Socrates approval only
+  approvalAction?: string;
+  approvalState?: 'pending' | 'approved' | 'rejected';
+  // Workspace invite only
+  inviteState?: 'pending' | 'accepted' | 'declined';
 }
 
 // ─── Static config ─────────────────────────────────────────────────────────
@@ -99,135 +103,156 @@ const SEVERITY_CONFIG: Record<Severity, {
   },
 };
 
-const TYPE_CONFIG: Record<MessageType, { label: string; Icon: React.ElementType }> = {
-  alert: { label: 'Alert', Icon: Bell },
-  notification: { label: 'Notification', Icon: Bell },
-  workflow: { label: 'Workflow', Icon: Zap },
-  system: { label: 'System', Icon: Settings2 },
+const TYPE_CONFIG: Record<NotifType, { label: string; Icon: React.ElementType; color: string }> = {
+  'workflow-failed':    { label: 'Workflow failed',    Icon: XCircle,   color: '#EA231A' },
+  'workflow-shared':    { label: 'Workflow shared',    Icon: Zap,       color: '#2864FF' },
+  'workspace-invite':   { label: 'Workspace invite',  Icon: UserPlus,  color: '#9275FF' },
+  'case-mention':       { label: 'Case mention',      Icon: AtSign,    color: '#FF8E2E' },
+  'socrates-approval':  { label: 'Approval request',  Icon: ThumbsUp,  color: '#7C5CFC' },
 };
 
-const WORKSPACES = ['Production', 'Development', 'Staging'];
+type WSItem = { id: string; name: string; isCurrent?: boolean };
+const WORKSPACES: WSItem[] = [
+  { id: 'torq-dev',     name: 'Torq - dev',     isCurrent: true },
+  { id: 'torq-staging', name: 'Torq - staging' },
+  { id: 'torq-prod',    name: 'Torq - prod' },
+  { id: 'acme-corp',    name: 'Acme Corp' },
+];
 
 const INITIAL_MESSAGES: Message[] = [
   {
     id: 'msg-1',
-    title: 'Ransomware detected on endpoint',
-    preview: 'CrowdStrike detected suspicious file encryption activity on WIN-SERVER-01.',
-    type: 'alert',
+    type: 'socrates-approval',
+    source: 'Socrates AI',
+    subHeader: 'Requesting approval · CASE-1001',
+    preview: 'Socrates AI analyzed the ransomware incident on WIN-SERVER-01 and wants to isolate the endpoint from the network to contain the threat.',
+    approvalAction: 'Isolate WIN-SERVER-01 from network',
+    approvalState: 'pending',
     severity: 'critical',
-    time: '1m ago',
+    time: '2m ago',
     isRead: false,
-    workspace: 'Production',
-    source: 'CrowdStrike',
+    workspace: 'torq-dev',
     isArchived: false,
+    targetPage: 'cases',
   },
   {
     id: 'msg-2',
-    title: 'Suspicious login attempt blocked',
-    preview: 'Multiple failed login attempts from IP 185.220.101.8 (TOR exit node).',
-    type: 'alert',
+    type: 'case-mention',
+    source: 'Sarah Chen',
+    subHeader: 'Mentioned you · CASE-1002',
+    preview: '@david.w Can you review the TOR exit node IP list and confirm if 185.220.101.8 matches any known threat actor cluster?',
     severity: 'high',
-    time: '5m ago',
+    time: '8m ago',
     isRead: false,
-    workspace: 'Production',
-    source: 'Okta',
+    workspace: 'torq-prod',
     isArchived: false,
+    targetPage: 'cases',
   },
   {
     id: 'msg-3',
-    title: 'Workflow "Auto-Triage" completed',
-    preview: 'Successfully processed 14 alerts in the last 24 hours.',
-    type: 'workflow',
+    type: 'workspace-invite',
+    source: 'Lihi Nachman',
+    subHeader: 'Invited you · Torq - dev',
+    preview: 'Lihi Nachman has invited you to collaborate with them in Torq, the no-code security automation platform for organizations.',
     severity: 'low',
-    time: '12m ago',
-    isRead: true,
-    workspace: 'Development',
-    source: 'Torq',
+    time: '15m ago',
+    isRead: false,
+    workspace: 'torq-dev',
     isArchived: false,
+    inviteState: 'pending',
   },
   {
     id: 'msg-4',
-    title: 'API rate limit approaching',
-    preview: 'The Jira integration is at 85% of its hourly rate limit.',
-    type: 'notification',
-    severity: 'medium',
-    time: '18m ago',
+    type: 'workflow-failed',
+    source: 'Torq',
+    subHeader: 'Workflow failed · Auto-Triage v2',
+    preview: 'Failed at step 7 — Jira ticket creation. Error: API rate limit exceeded. 6 alerts were left unprocessed and require manual review.',
+    severity: 'high',
+    time: '22m ago',
     isRead: false,
-    workspace: 'Staging',
-    source: 'Jira',
+    workspace: 'torq-staging',
     isArchived: false,
+    targetPage: 'workflows',
   },
   {
     id: 'msg-5',
-    title: 'New admin added to workspace',
-    preview: 'sarah.chen@company.com was granted Admin access by david.w@company.com.',
-    type: 'system',
-    severity: 'medium',
+    type: 'socrates-approval',
+    source: 'Socrates AI',
+    subHeader: 'Requesting approval · CASE-1005',
+    preview: 'Socrates AI is investigating the S3 data exfiltration incident and wants to block the identified IP range via AWS Security Group.',
+    approvalAction: 'Block IP range 203.0.113.0/24 in AWS Security Group',
+    approvalState: 'pending',
+    severity: 'critical',
     time: '34m ago',
-    isRead: true,
-    workspace: 'Production',
-    source: 'Torq',
+    isRead: false,
+    workspace: 'torq-prod',
     isArchived: false,
+    targetPage: 'cases',
   },
   {
     id: 'msg-6',
-    title: 'S3 bucket policy changed to public',
-    preview: 'Bucket "prod-data-backup" ACL modified. Immediate review recommended.',
-    type: 'alert',
-    severity: 'high',
+    type: 'workflow-shared',
+    source: 'Michael Torres',
+    subHeader: 'Shared workflow · Ransomware Response v3',
+    preview: 'Michael Torres shared this workflow with you. It includes automated containment, forensic collection, and recovery orchestration steps.',
+    severity: 'low',
     time: '1h ago',
-    isRead: false,
-    workspace: 'Production',
-    source: 'AWS',
+    isRead: true,
+    workspace: 'torq-dev',
     isArchived: false,
+    targetPage: 'workflows',
   },
   {
     id: 'msg-7',
-    title: 'SSL certificate expiring in 7 days',
-    preview: 'Certificate for api.company.com expires on Apr 21, 2026.',
-    type: 'notification',
+    type: 'case-mention',
+    source: 'Alex Kim',
+    subHeader: 'Mentioned you · CASE-1003',
+    preview: '@david.w The phishing campaign targets CFO emails specifically. Can you review the email headers I attached and validate the IOCs?',
     severity: 'medium',
     time: '2h ago',
     isRead: true,
-    workspace: 'Production',
-    source: 'AWS',
+    workspace: 'torq-dev',
     isArchived: false,
+    targetPage: 'cases',
   },
   {
     id: 'msg-8',
-    title: 'Malware quarantined successfully',
-    preview: 'Trojan.GenericKD.65432 quarantined on MacBook-Pro-JohnD.',
-    type: 'alert',
+    type: 'workflow-failed',
+    source: 'Torq',
+    subHeader: 'Workflow failed · Threat Intel Enrichment',
+    preview: 'Failed at step 3 — VirusTotal lookup. Error: Invalid API key. 12 IOCs were left unenriched and may require manual threat intelligence review.',
     severity: 'high',
     time: '3h ago',
     isRead: true,
-    workspace: 'Development',
-    source: 'CrowdStrike',
+    workspace: 'torq-staging',
     isArchived: false,
+    targetPage: 'workflows',
   },
   {
     id: 'msg-9',
-    title: 'Scheduled maintenance window',
-    preview: 'System maintenance scheduled for Apr 15, 2026 02:00–04:00 UTC.',
-    type: 'system',
+    type: 'workspace-invite',
+    source: 'Alex Kim',
+    subHeader: 'Invited you · Acme Corp',
+    preview: 'Alex Kim has invited you to join the Acme Corp MSSP workspace. Accept to access their shared security workflows and case dashboards.',
     severity: 'low',
     time: '5h ago',
     isRead: true,
-    workspace: 'Production',
-    source: 'Torq',
+    workspace: 'acme-corp',
     isArchived: false,
+    inviteState: 'pending',
   },
   {
     id: 'msg-10',
-    title: 'OAuth token leaked in GitHub commit',
-    preview: 'GitHub secret scanning alert triggered for private repo "private-api".',
-    type: 'alert',
-    severity: 'critical',
+    type: 'workflow-shared',
+    source: 'Sarah Chen',
+    subHeader: 'Shared workflow · Phishing Response Playbook',
+    preview: 'Sarah Chen shared this workflow with you. It includes automated email header analysis, user notification, and remediation orchestration.',
+    severity: 'low',
     time: '8h ago',
-    isRead: false,
-    workspace: 'Development',
-    source: 'GitHub',
+    isRead: true,
+    workspace: 'torq-prod',
     isArchived: false,
+    targetPage: 'workflows',
   },
 ];
 
@@ -250,28 +275,37 @@ function avatarColor(source: string) {
   return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
 }
 
-// ─── Source Avatar with severity badge ────────────────────────────────────
+// ─── Notification Avatar ───────────────────────────────────────────────────
 
-function SourceAvatar({ source, severity }: { source: string; severity: Severity }) {
-  const color = avatarColor(source);
-  const initials = source.slice(0, 2).toUpperCase();
-  const sev = SEVERITY_CONFIG[severity];
-  const SevIcon = sev.Icon;
+function NotifAvatar({ msg }: { msg: Message }) {
+  const isSocrates = msg.type === 'socrates-approval';
+  const typeCfg = TYPE_CONFIG[msg.type];
+  const TypeIconEl = typeCfg.Icon;
+
+  if (isSocrates) {
+    return (
+      <div className="relative shrink-0">
+        <div className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold select-none bg-[#7C5CFC] text-white">
+          S
+        </div>
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
+          <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
+        </span>
+      </div>
+    );
+  }
+
+  const color = avatarColor(msg.source);
+  const initials = msg.source.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="relative shrink-0">
-      {/* Circle avatar */}
-      <div
-        className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold select-none"
-        style={{ backgroundColor: color.bg, color: color.text }}
-      >
+      <div className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold select-none"
+        style={{ backgroundColor: color.bg, color: color.text }}>
         {initials}
       </div>
-      {/* Severity badge — bottom-right of avatar */}
-      <span
-        className={`absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] ${sev.bg}`}
-      >
-        <SevIcon className={`h-2.5 w-2.5 ${sev.color}`} strokeWidth={2.5} />
+      <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
+        <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
       </span>
     </div>
   );
@@ -283,33 +317,53 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   const cfg = SEVERITY_CONFIG[severity];
   const Icon = cfg.Icon;
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}
-    >
+    <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
       <Icon className="h-2.5 w-2.5" />
       {cfg.label}
     </span>
   );
 }
 
-function TypeIcon({ type }: { type: MessageType }) {
-  const cfg = TYPE_CONFIG[type];
-  const Icon = cfg.Icon;
-  return <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />;
-}
-
-// ─── Tooltip ──────────────────────────────────────────────────────────────
+// ─── Tooltip ─────────────────────────────────────────────────────────────
+// Renders into document.body via portal so it is never clipped by any container.
 
 function Tooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  function handleMouseEnter() {
+    if (wrapRef.current) {
+      const r = wrapRef.current.getBoundingClientRect();
+      setPos({ top: r.top - 6, left: r.left + r.width / 2 });
+    }
+    setVisible(true);
+  }
+
   return (
-    <div className="group/tip relative flex items-center">
+    <div ref={wrapRef} onMouseEnter={handleMouseEnter} onMouseLeave={() => setVisible(false)} className="flex items-center">
       {children}
-      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 opacity-0 group-hover/tip:opacity-100 transition-opacity duration-100">
-        <div className="rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 py-1 text-[var(--font-size-xs)] text-white whitespace-nowrap shadow-lg">
-          {label}
-        </div>
-        <div className="mx-auto mt-0.5 h-1.5 w-1.5 rotate-45 bg-[var(--color-neutral-800)]" style={{ marginTop: '-4px', marginLeft: 'calc(50% - 3px)' }} />
-      </div>
+      {visible && pos && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            transform: 'translateX(-50%) translateY(-100%)',
+            zIndex: 99999,
+            pointerEvents: 'none',
+          }}
+        >
+          <div className="rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 py-1 text-[var(--font-size-xs)] text-white whitespace-nowrap shadow-lg">
+            {label}
+          </div>
+          <div
+            className="bg-[var(--color-neutral-800)]"
+            style={{ width: 6, height: 6, transform: 'rotate(45deg)', margin: '-3px auto 0' }}
+          />
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -360,14 +414,38 @@ function MessageRow({
   onMarkRead,
   onArchive,
   onRestore,
+  onApprove,
+  onReject,
+  onAcceptInvite,
+  onDeclineInvite,
+  onUndoApproval,
+  onUndoInvite,
+  onNavigate,
 }: {
   msg: Message;
   view: View;
   onMarkRead: (id: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  onAcceptInvite: (id: string) => void;
+  onDeclineInvite: (id: string) => void;
+  onUndoApproval: (id: string) => void;
+  onUndoInvite: (id: string) => void;
+  onNavigate: (pageId: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const isSocrates = msg.type === 'socrates-approval';
+  const isInvite = msg.type === 'workspace-invite';
+  const hasTarget = !!msg.targetPage;
+
+  function handleRowClick() {
+    if (msg.targetPage) {
+      onMarkRead(msg.id);
+      onNavigate(msg.targetPage);
+    }
+  }
 
   return (
     <motion.div
@@ -378,55 +456,128 @@ function MessageRow({
       transition={{ duration: 0.2, ease: 'easeOut' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`relative flex items-start gap-3 px-4 py-3.5 border-b border-[var(--color-border-1)] cursor-pointer transition-colors duration-150 ${
-        hovered ? 'bg-[var(--color-surface-tertiary)]' : 'bg-[var(--color-surface-primary)]'
-      }`}
+      onClick={handleRowClick}
+      className={`relative flex items-start gap-3 px-4 py-3.5 border-b border-[#eeeef2] transition-colors duration-150 ${
+        hasTarget ? 'cursor-pointer' : 'cursor-default'
+      } ${hovered ? 'bg-[var(--color-surface-tertiary)]' : 'bg-[var(--color-surface-primary)]'}`}
     >
-      {/* Avatar + severity badge */}
-      <SourceAvatar source={msg.source} severity={msg.severity} />
+      {/* Avatar */}
+      <NotifAvatar msg={msg} />
 
       {/* Main content */}
       <div className="min-w-0 flex-1">
 
-        {/* Row 1: title + timestamp with unread dot */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <p
-            className={`text-[var(--font-size-sm)] leading-snug flex-1 min-w-0 ${
-              msg.isRead
-                ? 'font-normal text-[var(--color-text-secondary)]'
-                : 'font-semibold text-[var(--color-text-primary)]'
-            }`}
-          >
-            {msg.title}
+        {/* Row 1: sender name + timestamp + unread dot */}
+        <div className="flex items-center justify-between gap-2 mb-0.5">
+          <p className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)] truncate leading-snug">
+            {msg.source}
           </p>
-
-          {/* Timestamp + blue unread dot */}
-          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-            <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-350)] whitespace-nowrap">
-              {msg.time}
-            </span>
-            {!msg.isRead && (
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)] shrink-0" />
-            )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-350)] whitespace-nowrap">{msg.time}</span>
+            {!msg.isRead && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)] shrink-0" />}
           </div>
         </div>
 
-        {/* Row 2: preview */}
-        <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] line-clamp-2 leading-relaxed mb-2">
+        {/* Row 2: action subheader */}
+        <p className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)] truncate leading-snug mb-1">
+          {msg.subHeader}
+        </p>
+
+        {/* Row 3: body preview — grey, single line */}
+        <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] truncate leading-relaxed mb-2">
           {msg.preview}
         </p>
 
-        {/* Row 3: severity + workspace */}
-        <div className="flex items-center gap-1.5">
-          <SeverityBadge severity={msg.severity} />
+        {/* ── Socrates: approval action chip + Approve / Reject buttons ── */}
+        {isSocrates && msg.approvalState === 'pending' && (
+          <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5 mb-2.5 rounded-[var(--radius-sm)] bg-[#f3f0ff] border border-[#d4c9ff] px-2.5 py-1.5">
+              <ThumbsUp className="h-3 w-3 text-[#7C5CFC] shrink-0" />
+              <span className="text-[var(--font-size-xs)] text-[#5B3FC8] font-medium leading-snug truncate">{msg.approvalAction}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onApprove(msg.id)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-[#29CA88] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-white hover:bg-[#23b077] transition-colors"
+              >
+                <Check className="h-3.5 w-3.5" />Approve
+              </button>
+              <button
+                onClick={() => onReject(msg.id)}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-[var(--color-red-500)] hover:bg-[#ffeaea] transition-colors"
+              >
+                <XCircle className="h-3.5 w-3.5" />Reject
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Socrates: resolved — minimal green/grey text + Undo ── */}
+        {isSocrates && msg.approvalState && msg.approvalState !== 'pending' && (
+          <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
+            <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
+              {msg.approvalState === 'approved' ? 'Action approved' : 'Action rejected'}
+            </span>
+            <span className="text-[var(--color-neutral-300)] text-[var(--font-size-xs)] select-none">·</span>
+            <button
+              onClick={() => onUndoApproval(msg.id)}
+              className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] underline underline-offset-2 hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+        )}
+
+        {/* ── Workspace invite: Accept / Decline buttons ── */}
+        {isInvite && msg.inviteState === 'pending' && (
+          <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => onAcceptInvite(msg.id)}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--color-primary-500)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors"
+            >
+              <Check className="h-3.5 w-3.5" />Accept
+            </button>
+            <button
+              onClick={() => onDeclineInvite(msg.id)}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
+            >
+              Decline
+            </button>
+          </div>
+        )}
+
+        {/* ── Workspace invite: resolved — minimal text + Undo ── */}
+        {isInvite && msg.inviteState && msg.inviteState !== 'pending' && (
+          <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
+            <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
+              {msg.inviteState === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
+            </span>
+            <span className="text-[var(--color-neutral-300)] text-[var(--font-size-xs)] select-none">·</span>
+            <button
+              onClick={() => onUndoInvite(msg.id)}
+              className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] underline underline-offset-2 hover:text-[var(--color-text-primary)] transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+        )}
+
+        {/* Meta row: type badge + workspace chip */}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium"
+            style={{ backgroundColor: `${TYPE_CONFIG[msg.type].color}14`, color: TYPE_CONFIG[msg.type].color }}>
+            {TYPE_CONFIG[msg.type].label}
+          </span>
           <span className="flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-surface-tertiary)] px-1.5 py-0.5 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
             <Building2 className="h-3 w-3 shrink-0" />
-            {msg.workspace}
+            {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}
           </span>
         </div>
       </div>
 
-      {/* Hover action buttons — icon-only bar, Notion style */}
+      {/* Hover action buttons */}
       <AnimatePresence>
         {hovered && (
           <motion.div
@@ -435,35 +586,27 @@ function MessageRow({
             exit={{ opacity: 0, scale: 0.92 }}
             transition={{ duration: 0.1 }}
             className="absolute right-3 top-2.5 flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-1 py-1 shadow-md"
+            onClick={(e) => e.stopPropagation()}
           >
             {view !== 'archive' ? (
               <>
                 <Tooltip label={msg.isRead ? 'Mark as unread' : 'Mark as read'}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onMarkRead(msg.id); }}
-                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-                  >
-                    {msg.isRead
-                      ? <BellOff className="h-3.5 w-3.5" />
-                      : <Check className="h-3.5 w-3.5" />
-                    }
+                  <button onClick={(e) => { e.stopPropagation(); onMarkRead(msg.id); }}
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                    {msg.isRead ? <BellOff className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
                   </button>
                 </Tooltip>
                 <Tooltip label="Archive">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onArchive(msg.id); }}
-                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); onArchive(msg.id); }}
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
                     <ArchiveIcon className="h-3.5 w-3.5" />
                   </button>
                 </Tooltip>
               </>
             ) : (
               <Tooltip label="Restore to inbox">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRestore(msg.id); }}
-                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-50)] transition-colors"
-                >
+                <button onClick={(e) => { e.stopPropagation(); onRestore(msg.id); }}
+                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-50)] transition-colors">
                   <ArchiveRestore className="h-3.5 w-3.5" />
                 </button>
               </Tooltip>
@@ -477,14 +620,14 @@ function MessageRow({
 
 // ─── Filter config ────────────────────────────────────────────────────────
 
-type NotifTypeId = 'mentions' | 'invitations' | 'approvals' | 'workflowFailed' | 'caseClosed';
+type NotifTypeId = NotifType;
 
 const NOTIF_TYPES: { id: NotifTypeId; label: string; Icon: React.ElementType }[] = [
-  { id: 'mentions',       label: 'Mentions',        Icon: AtSign },
-  { id: 'invitations',    label: 'Invitations',      Icon: UserPlus },
-  { id: 'approvals',      label: 'Approvals',        Icon: ThumbsUp },
-  { id: 'workflowFailed', label: 'Workflow Failed',  Icon: XCircle },
-  { id: 'caseClosed',     label: 'Case Closed',      Icon: FolderOpen },
+  { id: 'workflow-failed',    label: 'Workflow Failed',   Icon: XCircle },
+  { id: 'workflow-shared',    label: 'Workflow Shared',   Icon: Zap },
+  { id: 'workspace-invite',   label: 'Workspace Invite',  Icon: UserPlus },
+  { id: 'case-mention',       label: 'Case Mention',      Icon: AtSign },
+  { id: 'socrates-approval',  label: 'Approval Request',  Icon: ThumbsUp },
 ];
 
 const ALL_SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
@@ -706,49 +849,65 @@ function FilterPopover({
 
 // ─── Workspace Popover ────────────────────────────────────────────────────
 
+function WsCheckbox({ checked, partial }: { checked: boolean; partial?: boolean }) {
+  return (
+    <span
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+        checked || partial
+          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]'
+          : 'border-[var(--color-border-3)] bg-white'
+      }`}
+    >
+      {checked && !partial && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
+      {partial && <span className="h-0.5 w-2 rounded-full bg-white" />}
+    </span>
+  );
+}
+
 function WorkspacePopover({
-  mode,
-  selectedSingle,
-  selectedMulti,
+  selected,
   onChange,
   onClose,
   anchorEl,
 }: {
-  mode: WorkspaceMode;
-  selectedSingle: string;
-  selectedMulti: string[];
-  onChange: (mode: WorkspaceMode, single: string, multi: string[]) => void;
+  selected: string[];   // empty = all workspaces
+  onChange: (ids: string[]) => void;
   onClose: () => void;
   anchorEl: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [localMode, setLocalMode] = useState<WorkspaceMode>(mode);
-  const [localSingle, setLocalSingle] = useState(selectedSingle);
-  const [localMulti, setLocalMulti] = useState<string[]>(selectedMulti);
+  const [query, setQuery] = useState('');
+  const [local, setLocal] = useState<string[]>(selected);
   const pos = usePortalPos(anchorEl, 'left');
 
   useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
+    function handler(e: MouseEvent) {
       const t = e.target as Node;
       if (ref.current?.contains(t) || anchorEl?.contains(t)) return;
-      onChange(localMode, localSingle, localMulti);
+      onChange(local);
       onClose();
     }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [onClose, onChange, localMode, localSingle, localMulti, anchorEl]);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose, onChange, local, anchorEl]);
 
-  function toggleMulti(ws: string) {
-    setLocalMulti((prev) =>
-      prev.includes(ws) ? prev.filter((x) => x !== ws) : [...prev, ws]
-    );
+  const allSelected = local.length === 0;
+  const filtered = WORKSPACES.filter((ws) =>
+    ws.name.toLowerCase().includes(query.toLowerCase())
+  );
+
+  function toggleAll() {
+    setLocal([]);
+    onChange([]);
   }
 
-  const modeOptions: { id: WorkspaceMode; label: string }[] = [
-    { id: 'all', label: 'All Workspaces' },
-    { id: 'single', label: 'Single Workspace' },
-    { id: 'multi', label: 'Multi-select' },
-  ];
+  function toggleWs(id: string) {
+    const next = local.includes(id)
+      ? local.filter((x) => x !== id)
+      : [...local, id];
+    // if all are checked, collapse to "all" (empty)
+    setLocal(next.length === WORKSPACES.length ? [] : next);
+  }
 
   if (!pos || typeof document === 'undefined') return null;
 
@@ -756,99 +915,71 @@ function WorkspacePopover({
     <motion.div
       ref={ref}
       style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
-      initial={{ opacity: 0, y: -8, scale: 0.97 }}
+      initial={{ opacity: 0, y: -6, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.97 }}
-      transition={{ duration: 0.15 }}
-      className="w-60 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg"
+      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+      transition={{ duration: 0.14 }}
+      className="w-56 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-xl overflow-hidden"
     >
-      <div className="p-2">
-        {modeOptions.map((opt) => (
-          <button
-            key={opt.id}
-            onClick={() => {
-              setLocalMode(opt.id);
-              if (opt.id === 'all') {
-                onChange('all', '', []);
-                onClose();
-              }
-            }}
-            className={`flex w-full items-center justify-between rounded-[var(--radius-sm)] px-3 py-2 text-[var(--font-size-sm)] transition-colors ${
-              localMode === opt.id
-                ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]'
-                : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)]'
-            }`}
-          >
-            {opt.label}
-            {localMode === opt.id && <Check className="h-3.5 w-3.5" />}
-          </button>
-        ))}
+      {/* Search */}
+      <div className="flex items-center gap-2 border-b border-[var(--color-border-1)] px-3 py-2.5">
+        <Search className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Find workspace..."
+          className="flex-1 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none"
+        />
+      </div>
 
-        {(localMode === 'single' || localMode === 'multi') && (
-          <>
-            <div className="my-2 border-t border-[var(--color-border-1)]" />
-            <div className="space-y-1">
-              {WORKSPACES.map((ws) => {
-                const isSelected =
-                  localMode === 'single'
-                    ? localSingle === ws
-                    : localMulti.includes(ws);
-                return (
-                  <button
-                    key={ws}
-                    onClick={() => {
-                      if (localMode === 'single') {
-                        setLocalSingle(ws);
-                        onChange('single', ws, []);
-                        onClose();
-                      } else {
-                        toggleMulti(ws);
-                      }
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-[var(--font-size-sm)] transition-colors ${
-                      isSelected
-                        ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)]'
-                    }`}
-                  >
-                    {localMode === 'multi' && (
-                      <span
-                        className={`flex h-4 w-4 items-center justify-center rounded-[2px] border transition-colors ${
-                          isSelected
-                            ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]'
-                            : 'border-[var(--color-border-3)]'
-                        }`}
-                      >
-                        {isSelected && <Check className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                    )}
-                    <Building2 className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
-                    {ws}
-                  </button>
-                );
-              })}
-            </div>
+      <div className="py-1">
+        {/* All workspaces row */}
+        <button
+          onClick={toggleAll}
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
+        >
+          <WsCheckbox checked={allSelected} partial={!allSelected && local.length > 0} />
+          <span className="flex-1 text-left font-medium">
+            All workspaces ({WORKSPACES.length})
+          </span>
+        </button>
 
-            {localMode === 'multi' && (
-              <div className="mt-2 px-2 pb-1">
-                <button
-                  onClick={() => {
-                    onChange('multi', '', localMulti);
-                    onClose();
-                  }}
-                  className="w-full rounded-[var(--radius-sm)] bg-[var(--color-primary-500)] py-1.5 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors"
-                >
-                  Apply ({localMulti.length} selected)
-                </button>
-              </div>
-            )}
-          </>
+        <div className="mx-3 my-1 border-t border-[var(--color-border-1)]" />
+
+        {/* Individual workspace rows */}
+        {filtered.map((ws) => {
+          const isChecked = allSelected || local.includes(ws.id);
+          return (
+            <button
+              key={ws.id}
+              onClick={() => toggleWs(ws.id)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
+            >
+              <WsCheckbox checked={isChecked} />
+              <span className="flex flex-col items-start min-w-0">
+                <span className="truncate text-[var(--color-text-primary)]">{ws.name}</span>
+                {ws.isCurrent && (
+                  <span className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
+                    Current workspace
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <p className="px-3 py-3 text-center text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">
+            No workspaces found
+          </p>
         )}
       </div>
     </motion.div>,
     document.body,
   );
 }
+
 
 // ─── More Menu ────────────────────────────────────────────────────────────
 
@@ -927,9 +1058,10 @@ function MoreMenu({
 export interface InboxPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  onNavigate: (pageId: string) => void;
 }
 
-export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
+export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
   const [view, setView] = useState<View>('all');
   const [prevView, setPrevView] = useState<'all' | 'unread'>('all');
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
@@ -941,9 +1073,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [headerHovered, setHeaderHovered] = useState(false);
-  const [wsMode, setWsMode] = useState<WorkspaceMode>('all');
-  const [wsSingle, setWsSingle] = useState('');
-  const [wsMulti, setWsMulti] = useState<string[]>([]);
+  const [wsFilter, setWsFilter] = useState<string[]>([]);  // empty = all
   const [wsOpen, setWsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Inbox layer refs
@@ -954,17 +1084,18 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const archiveFilterBtnRef = useRef<HTMLButtonElement>(null);
   const archiveMoreBtnRef = useRef<HTMLButtonElement>(null);
   const archiveWsBtnRef = useRef<HTMLButtonElement>(null);
+  // Undo archive toast
+  const [undoToast, setUndoToast] = useState<{ ids: string[]; label: string } | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
 
   const wsLabel =
-    wsMode === 'all'
+    wsFilter.length === 0
       ? 'All workspaces'
-      : wsMode === 'single'
-      ? wsSingle || 'Select workspace'
-      : wsMulti.length === 0
-      ? 'Select workspaces'
-      : wsMulti.length === WORKSPACES.length
-      ? 'All workspaces'
-      : `${wsMulti.length} workspaces`;
+      : wsFilter.length === 1
+      ? (WORKSPACES.find((w) => w.id === wsFilter[0])?.name ?? wsFilter[0])
+      : `${wsFilter.length} workspaces`;
 
   const handleMarkRead = useCallback((id: string) => {
     setMessages((prev) =>
@@ -973,9 +1104,21 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   }, []);
 
   const handleArchive = useCallback((id: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, isArchived: true } : m))
-    );
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, isArchived: true } : m)));
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoToast({ ids: [id], label: 'Archived' });
+    undoTimerRef.current = setTimeout(() => setUndoToast(null), 3500);
+  }, []);
+
+  const handleUndoArchive = useCallback(() => {
+    setUndoToast((toast) => {
+      if (!toast) return null;
+      setMessages((prev) =>
+        prev.map((m) => (toast.ids.includes(m.id) ? { ...m, isArchived: false } : m))
+      );
+      return null;
+    });
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, []);
 
   const handleRestore = useCallback((id: string) => {
@@ -1002,6 +1145,42 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
     );
   }, []);
 
+  const handleApprove = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, approvalState: 'approved', isRead: true } : m))
+    );
+  }, []);
+
+  const handleReject = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, approvalState: 'rejected', isRead: true } : m))
+    );
+  }, []);
+
+  const handleUndoApproval = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, approvalState: 'pending', isRead: false } : m))
+    );
+  }, []);
+
+  const handleAcceptInvite = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, inviteState: 'accepted', isRead: true } : m))
+    );
+  }, []);
+
+  const handleDeclineInvite = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, inviteState: 'declined', isRead: true } : m))
+    );
+  }, []);
+
+  const handleUndoInvite = useCallback((id: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, inviteState: 'pending', isRead: false } : m))
+    );
+  }, []);
+
   function removeSeverityFilter(s: Severity) {
     setFilter((f) => ({ ...f, severities: f.severities.filter((x) => x !== s) }));
   }
@@ -1010,10 +1189,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   }
 
   function matchesWorkspace(m: Message) {
-    if (wsMode === 'all') return true;
-    if (wsMode === 'single') return wsSingle ? m.workspace === wsSingle : true;
-    if (wsMode === 'multi') return wsMulti.length === 0 || wsMulti.includes(m.workspace);
-    return true;
+    if (wsFilter.length === 0) return true;
+    return wsFilter.includes(m.workspace);
   }
 
   function goToArchive() {
@@ -1033,15 +1210,24 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
   const inboxVisible = messages.filter((m) => {
     if (m.isArchived) return false;
     if (view === 'unread' && m.isRead) return false;
-    if (search && !m.title.toLowerCase().includes(search.toLowerCase()) && !m.preview.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const match = m.source.toLowerCase().includes(q) || m.subHeader.toLowerCase().includes(q) || m.preview.toLowerCase().includes(q);
+      if (!match) return false;
+    }
     if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
+    if (filter.notifTypes.length > 0 && !filter.notifTypes.includes(m.type as NotifTypeId)) return false;
     if (!matchesWorkspace(m)) return false;
     return true;
   });
 
   const archiveVisible = messages.filter((m) => {
     if (!m.isArchived) return false;
-    if (archiveSearch && !m.title.toLowerCase().includes(archiveSearch.toLowerCase()) && !m.preview.toLowerCase().includes(archiveSearch.toLowerCase())) return false;
+    if (archiveSearch) {
+      const q = archiveSearch.toLowerCase();
+      const match = m.source.toLowerCase().includes(q) || m.subHeader.toLowerCase().includes(q) || m.preview.toLowerCase().includes(q);
+      if (!match) return false;
+    }
     if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
     if (!matchesWorkspace(m)) return false;
     return true;
@@ -1097,8 +1283,10 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               </button>
               <AnimatePresence>
                 {wsOpen && (
-                  <WorkspacePopover anchorEl={wsBtnRef.current} mode={wsMode} selectedSingle={wsSingle} selectedMulti={wsMulti}
-                    onChange={(m, s, multi) => { setWsMode(m); setWsSingle(s); setWsMulti(multi); }}
+                  <WorkspacePopover
+                    anchorEl={wsBtnRef.current}
+                    selected={wsFilter}
+                    onChange={setWsFilter}
                     onClose={() => setWsOpen(false)}
                   />
                 )}
@@ -1244,7 +1432,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
               <motion.div layout>
                 <AnimatePresence mode="popLayout">
                   {inboxVisible.map((msg) => (
-                    <MessageRow key={msg.id} msg={msg} view={view} onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} />
+                    <MessageRow key={msg.id} msg={msg} view={view} onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
                   ))}
                 </AnimatePresence>
               </motion.div>
@@ -1291,8 +1479,10 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                     </button>
                     <AnimatePresence>
                       {wsOpen && (
-                        <WorkspacePopover anchorEl={archiveWsBtnRef.current} mode={wsMode} selectedSingle={wsSingle} selectedMulti={wsMulti}
-                          onChange={(m, s, multi) => { setWsMode(m); setWsSingle(s); setWsMulti(multi); }}
+                        <WorkspacePopover
+                          anchorEl={archiveWsBtnRef.current}
+                          selected={wsFilter}
+                          onChange={setWsFilter}
                           onClose={() => setWsOpen(false)}
                         />
                       )}
@@ -1395,12 +1585,37 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
                     <motion.div layout>
                       <AnimatePresence mode="popLayout">
                         {archiveVisible.map((msg) => (
-                          <MessageRow key={msg.id} msg={msg} view="archive" onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} />
+                          <MessageRow key={msg.id} msg={msg} view="archive" onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
                         ))}
                       </AnimatePresence>
                     </motion.div>
                   )}
                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Undo archive toast ── */}
+          <AnimatePresence>
+            {undoToast && (
+              <motion.div
+                key="undo-toast"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18 }}
+                className="absolute bottom-4 left-3 right-3 z-20 flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--color-neutral-800)] px-3 py-2.5 shadow-xl"
+              >
+                <div className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-[#29CA88] shrink-0" />
+                  <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-100)]">{undoToast.label}</span>
+                </div>
+                <button
+                  onClick={handleUndoArchive}
+                  className="text-[var(--font-size-xs)] text-[var(--color-neutral-300)] underline underline-offset-2 hover:text-white transition-colors ml-3"
+                >
+                  Undo
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
