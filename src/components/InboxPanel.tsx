@@ -34,6 +34,7 @@ import {
   XCircle,
   FolderOpen,
   Bot,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Tag, SeverityTag } from '@/components/ui/Tag';
@@ -459,6 +460,57 @@ function EmptyState({ view }: { view: View }) {
   );
 }
 
+// ─── Countdown Undo Button ─────────────────────────────────────────────────
+
+const COUNTDOWN_MS = 4000;
+const DEBOUNCE_MS  = 500;
+const EXECUTING_MS = 800;
+
+type ActionPhase = 'idle' | 'countdown' | 'executing';
+type PendingAction = 'approved' | 'rejected' | 'accepted' | 'declined';
+
+/** Animated conic-gradient border that sweeps away over COUNTDOWN_MS. */
+function CountdownUndoButton({
+  progress,
+  enabled,
+  onUndo,
+}: {
+  progress: number;   // 1 = full ring, 0 = empty
+  enabled: boolean;   // false during 500ms debounce
+  onUndo: () => void;
+}) {
+  const deg = progress * 360;
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        padding: '1.5px',
+        borderRadius: 'calc(var(--radius-sm) + 1.5px)',
+        background: `conic-gradient(
+          from -90deg,
+          var(--color-red-500) 0deg,
+          var(--color-red-500) ${deg}deg,
+          var(--color-border-2) ${deg}deg,
+          var(--color-border-2) 360deg
+        )`,
+      }}
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); if (enabled) onUndo(); }}
+        disabled={!enabled}
+        style={{ borderRadius: 'var(--radius-sm)' }}
+        className={`flex items-center gap-1.5 px-3 bg-[var(--color-surface-primary)] text-[var(--font-size-sm)] font-medium transition-colors select-none whitespace-nowrap ${
+          enabled
+            ? 'text-[var(--color-red-500)] cursor-pointer hover:bg-[var(--color-red-50)]'
+            : 'text-[var(--color-text-disabled)] cursor-not-allowed'
+        }`}
+      >
+        Undo
+      </button>
+    </div>
+  );
+}
+
 // ─── Message Row ──────────────────────────────────────────────────────────
 
 function MessageRow({
@@ -490,8 +542,78 @@ function MessageRow({
 }) {
   const [hovered, setHovered] = useState(false);
   const isSocrates = msg.type === 'socrates-approval';
-  const isInvite = msg.type === 'workspace-invite';
-  const hasTarget = !!msg.targetPage;
+  const isInvite   = msg.type === 'workspace-invite';
+  const hasTarget  = !!msg.targetPage;
+
+  // ── Action state machine ──────────────────────────────────────────────
+  const [actionPhase, setActionPhase]         = useState<ActionPhase>('idle');
+  const [pendingAction, setPendingAction]     = useState<PendingAction | null>(null);
+  const [countdownProgress, setProgress]      = useState(1);
+  const [undoBtnEnabled, setUndoBtnEnabled]   = useState(false);
+
+  const phaseTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceTimer= useRef<ReturnType<typeof setTimeout> | null>(null);
+  const execTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef       = useRef<number | null>(null);
+  const startRef     = useRef(0);
+
+  // Cleanup on unmount
+  useEffect(() => () => {
+    if (phaseTimer.current)    clearTimeout(phaseTimer.current);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (execTimer.current)     clearTimeout(execTimer.current);
+    if (rafRef.current)        cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  function startCountdown(action: PendingAction) {
+    setActionPhase('countdown');
+    setPendingAction(action);
+    setProgress(1);
+    setUndoBtnEnabled(false);
+
+    // 500ms debounce before Undo is clickable
+    debounceTimer.current = setTimeout(() => setUndoBtnEnabled(true), DEBOUNCE_MS);
+
+    // rAF-driven progress
+    startRef.current = performance.now();
+    function tick(now: number) {
+      const elapsed = now - startRef.current;
+      const p = Math.max(0, 1 - elapsed / COUNTDOWN_MS);
+      setProgress(p);
+      if (p > 0) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    }
+    rafRef.current = requestAnimationFrame(tick);
+
+    // After COUNTDOWN_MS → execute phase
+    phaseTimer.current = setTimeout(() => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      setActionPhase('executing');
+      setProgress(0);
+
+      // After EXECUTING_MS → commit
+      execTimer.current = setTimeout(() => {
+        setActionPhase('idle');
+        if (action === 'approved')  { onApprove(msg.id);      onMarkRead(msg.id); }
+        if (action === 'rejected')  { onReject(msg.id);       onMarkRead(msg.id); }
+        if (action === 'accepted')  { onAcceptInvite(msg.id); onMarkRead(msg.id); }
+        if (action === 'declined')  { onDeclineInvite(msg.id); onMarkRead(msg.id); }
+      }, EXECUTING_MS);
+    }, COUNTDOWN_MS);
+  }
+
+  function handleUndo() {
+    if (!undoBtnEnabled) return;
+    if (phaseTimer.current)    clearTimeout(phaseTimer.current);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (execTimer.current)     clearTimeout(execTimer.current);
+    if (rafRef.current)        cancelAnimationFrame(rafRef.current);
+    setActionPhase('idle');
+    setPendingAction(null);
+    setProgress(1);
+    setUndoBtnEnabled(false);
+  }
 
   function handleRowClick() {
     if (msg.targetPage) {
@@ -541,68 +663,91 @@ function MessageRow({
           {msg.preview}
         </p>
 
-        {/* ── Socrates: approval action chip + Approve / Reject buttons ── */}
+        {/* ── Socrates: action chip ── */}
         {isSocrates && msg.approvalState === 'pending' && (
-          <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
-            {/* Chip: overflow-hidden + min-w-0 ensure text truncates inside flex */}
-            <div className="flex items-center gap-1.5 mb-2.5 rounded-[var(--radius-sm)] bg-[var(--color-purple-50)] border border-[var(--color-purple-200)] px-2.5 py-1.5 min-w-0 overflow-hidden">
-              <ThumbsUp className="h-3 w-3 text-[var(--color-purple-500)] shrink-0" />
-              <span className="text-[var(--font-size-xs)] text-[var(--color-purple-500)] font-medium truncate min-w-0">{msg.approvalAction}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
-                Approve
-              </Button>
-              <Button variant="tertiary" size="sm" onClick={() => onReject(msg.id)}>
-                Reject
-              </Button>
-            </div>
+          <div className="flex items-center gap-1.5 mb-2 rounded-[var(--radius-sm)] bg-[var(--color-purple-50)] border border-[var(--color-purple-200)] px-2.5 py-1.5 min-w-0 overflow-hidden">
+            <ThumbsUp className="h-3 w-3 text-[var(--color-purple-500)] shrink-0" />
+            <span className="text-[var(--font-size-xs)] text-[var(--color-purple-500)] font-medium truncate min-w-0">{msg.approvalAction}</span>
           </div>
         )}
 
-        {/* ── Socrates: resolved — minimal green/grey text + Undo ── */}
+        {/* ── Socrates: Approve/Reject → countdown → executing → resolved ── */}
+        {isSocrates && msg.approvalState === 'pending' && (
+          <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
+            {actionPhase === 'idle' && (
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => startCountdown('approved')}>
+                  Approve
+                </Button>
+                <Button variant="tertiary" size="sm" onClick={() => startCountdown('rejected')}>
+                  Reject
+                </Button>
+              </div>
+            )}
+            {actionPhase === 'countdown' && (
+              <div className="flex items-center gap-2">
+                <CountdownUndoButton progress={countdownProgress} enabled={undoBtnEnabled} onUndo={handleUndo} />
+                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>
+                  {pendingAction === 'approved' ? 'Approving…' : 'Rejecting…'}
+                </span>
+              </div>
+            )}
+            {actionPhase === 'executing' && (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-tertiary)]" />
+                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>Processing…</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Socrates: resolved ── */}
         {isSocrates && msg.approvalState && msg.approvalState !== 'pending' && (
           <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
             <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
               {msg.approvalState === 'approved' ? 'Action approved' : 'Action rejected'}
             </span>
-            <span className="text-[var(--color-neutral-300)] text-[var(--font-size-xs)] select-none">·</span>
-            <button
-              onClick={() => onUndoApproval(msg.id)}
-              className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] underline underline-offset-2 hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              Undo
-            </button>
           </div>
         )}
 
-        {/* ── Workspace invite: Accept / Decline buttons ── */}
+        {/* ── Workspace invite: Accept/Decline → countdown → executing → resolved ── */}
         {isInvite && msg.inviteState === 'pending' && (
           <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-            <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
-              Accept
-            </Button>
-            <Button variant="tertiary" size="sm" onClick={() => onDeclineInvite(msg.id)}>
-              Decline
-            </Button>
+            {actionPhase === 'idle' && (
+              <>
+                <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => startCountdown('accepted')}>
+                  Accept
+                </Button>
+                <Button variant="tertiary" size="sm" onClick={() => startCountdown('declined')}>
+                  Decline
+                </Button>
+              </>
+            )}
+            {actionPhase === 'countdown' && (
+              <>
+                <CountdownUndoButton progress={countdownProgress} enabled={undoBtnEnabled} onUndo={handleUndo} />
+                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>
+                  {pendingAction === 'accepted' ? 'Accepting…' : 'Declining…'}
+                </span>
+              </>
+            )}
+            {actionPhase === 'executing' && (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-tertiary)]" />
+                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>Processing…</span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Workspace invite: resolved — minimal text + Undo ── */}
+        {/* ── Workspace invite: resolved ── */}
         {isInvite && msg.inviteState && msg.inviteState !== 'pending' && (
           <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
             <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
               {msg.inviteState === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
             </span>
-            <span className="text-[var(--color-neutral-300)] text-[var(--font-size-xs)] select-none">·</span>
-            <button
-              onClick={() => onUndoInvite(msg.id)}
-              className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] underline underline-offset-2 hover:text-[var(--color-text-primary)] transition-colors"
-            >
-              Undo
-            </button>
           </div>
         )}
 
