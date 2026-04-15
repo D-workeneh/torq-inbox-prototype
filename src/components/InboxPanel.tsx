@@ -718,7 +718,15 @@ function FilterPopover({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [activeSubmenu, setActiveSubmenu] = useState<'notifType' | 'severity' | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pos = usePortalPos(anchorEl, 'right');
+
+  function scheduleHide() {
+    hideTimerRef.current = setTimeout(() => setActiveSubmenu(null), 200);
+  }
+  function cancelHide() {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  }
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -757,7 +765,8 @@ function FilterPopover({
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.13 }}
       className="w-52 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
-      onMouseLeave={() => setActiveSubmenu(null)}
+      onMouseLeave={scheduleHide}
+      onMouseEnter={cancelHide}
     >
       {/* Notification type row */}
       <div
@@ -766,7 +775,7 @@ function FilterPopover({
             ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
             : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
         }`}
-        onMouseEnter={() => setActiveSubmenu('notifType')}
+        onMouseEnter={() => { cancelHide(); setActiveSubmenu('notifType'); }}
       >
         <span className="flex-1">Notification type</span>
         {filter.notifTypes.length > 0 && (
@@ -776,9 +785,15 @@ function FilterPopover({
         )}
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
 
-        {/* Notification type submenu */}
+        {/* Notification type submenu — negative left margin bridges the gap so hover is seamless */}
         {activeSubmenu === 'notifType' && (
-          <div className="absolute left-full top-0 ml-1 z-10 w-52 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1">
+          <div
+            className="absolute left-full top-0 -ml-px z-10 w-52 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+            onMouseEnter={cancelHide}
+            onMouseLeave={scheduleHide}
+          >
+            {/* invisible left-side bridge strip so diagonal cursor movement is captured */}
+            <div className="absolute inset-y-0 -left-2 w-2" onMouseEnter={cancelHide} />
             {NOTIF_TYPES.map((t) => (
               <FilterCheckRow
                 key={t.id}
@@ -799,7 +814,7 @@ function FilterPopover({
             ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
             : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
         }`}
-        onMouseEnter={() => setActiveSubmenu('severity')}
+        onMouseEnter={() => { cancelHide(); setActiveSubmenu('severity'); }}
       >
         <span className="flex-1">Severity</span>
         {filter.severities.length > 0 && (
@@ -811,7 +826,13 @@ function FilterPopover({
 
         {/* Severity submenu */}
         {activeSubmenu === 'severity' && (
-          <div className="absolute left-full top-0 ml-1 z-10 w-48 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1">
+          <div
+            className="absolute left-full top-0 -ml-px z-10 w-48 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+            onMouseEnter={cancelHide}
+            onMouseLeave={scheduleHide}
+          >
+            {/* invisible left-side bridge strip */}
+            <div className="absolute inset-y-0 -left-2 w-2" onMouseEnter={cancelHide} />
             {ALL_SEVERITIES.map((s) => {
               const cfg = SEVERITY_CONFIG[s];
               const Icon = cfg.Icon;
