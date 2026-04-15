@@ -1010,7 +1010,7 @@ export default function Home() {
             <AnimatePresence mode="wait" initial={false}>
               {sidebarCollapsed ? (
 
-                /* ── COLLAPSED: >> expand button (top) + workspace logo (below) ── */
+                /* ── COLLAPSED: workspace logo (top, static) → expand arrow appears on hover ── */
                 <motion.div
                   key="collapsed-brand"
                   initial={{ opacity: 0 }}
@@ -1019,18 +1019,27 @@ export default function Home() {
                   transition={{ duration: 0.15 }}
                   className="flex flex-col items-center gap-2 py-3 px-2"
                 >
-                  {/* Expand arrow — always visible at top */}
-                  <motion.button
-                    onClick={(e) => { e.stopPropagation(); setSidebarCollapsed(false); }}
-                    whileHover={{ scale: 1.08 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors"
-                    title="Expand sidebar"
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </motion.button>
+                  {/* Expand arrow — only visible on hover, slides in above logo */}
+                  <AnimatePresence>
+                    {sidebarHovered && (
+                      <motion.button
+                        key="expand-btn"
+                        initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                        animate={{ opacity: 1, height: 28, marginBottom: 0 }}
+                        exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={(e) => { e.stopPropagation(); setSidebarCollapsed(false); }}
+                        whileHover={{ scale: 1.08 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="flex w-7 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors overflow-hidden shrink-0"
+                        title="Expand sidebar"
+                      >
+                        <ChevronsRight className="h-4 w-4 shrink-0" />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
 
-                  {/* Workspace logo — click = expand + open picker */}
+                  {/* Workspace logo — always visible, click = expand + open picker */}
                   <motion.button
                     onClick={(e) => { e.stopPropagation(); expandAndOpenPicker(); }}
                     whileHover={{ scale: 1.06 }}
