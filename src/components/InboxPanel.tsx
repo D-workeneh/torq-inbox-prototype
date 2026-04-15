@@ -501,7 +501,7 @@ function MessageRow({
               <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
                 Approve
               </Button>
-              <Button variant="tertiary" size="sm" leftIcon={<XCircle />} onClick={() => onReject(msg.id)}>
+              <Button variant="tertiary" size="sm" onClick={() => onReject(msg.id)}>
                 Reject
               </Button>
             </div>
