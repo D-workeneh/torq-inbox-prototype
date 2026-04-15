@@ -207,7 +207,7 @@ const SEVERITY_PRESETS: Record<SeverityLevel, SeverityPreset> = {
 export interface SeverityTagProps {
   level: SeverityLevel;
   size?: TagSize;
-  /** 'bordered' (default) shows an outline — matches Figma spec */
+  /** 'subtle' (default) — light tinted background, no border, matches Figma design system */
   appearance?: TagAppearance;
   onRemove?: () => void;
 }
@@ -222,7 +222,7 @@ export interface SeverityTagProps {
  * <SeverityTag level="high" size="md" />
  * <SeverityTag level="medium" onRemove={() => {}} />
  */
-export function SeverityTag({ level, size = 'sm', appearance = 'bordered', onRemove }: SeverityTagProps) {
+export function SeverityTag({ level, size = 'sm', appearance = 'subtle', onRemove }: SeverityTagProps) {
   const { color, Icon, label } = SEVERITY_PRESETS[level];
   return (
     <Tag color={color} appearance={appearance} size={size} icon={<Icon />} onRemove={onRemove}>
