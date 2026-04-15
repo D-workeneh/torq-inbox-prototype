@@ -1000,6 +1000,7 @@ export default function Home() {
         <motion.aside
           animate={{ width: SIDEBAR_W }}
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          style={{ position: 'relative', zIndex: 45 }}
           onMouseEnter={() => setSidebarHovered(true)}
           onMouseLeave={() => setSidebarHovered(false)}
           onClick={sidebarCollapsed ? () => setSidebarCollapsed(false) : undefined}
