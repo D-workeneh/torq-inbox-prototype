@@ -6,13 +6,14 @@ import { X } from 'lucide-react';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type TagColor =
-  | 'neutral'   // Grey — default, no semantic meaning
-  | 'primary'   // Blue — brand / info
+  | 'neutral'   // Grey — Low severity / default
+  | 'primary'   // Blue — Info / brand
   | 'success'   // Teal — positive, active, approved
-  | 'warning'   // Orange — caution
+  | 'yellow'    // Yellow — Medium severity
+  | 'warning'   // Orange — High severity / caution
   | 'error'     // Red — error, failed
-  | 'critical'  // Red bold — critical severity
-  | 'info'      // Cyan — informational
+  | 'critical'  // Red bold — Critical severity
+  | 'info'      // Blue (primary) — informational
   | 'purple';   // Purple — AI / special
 
 export type TagAppearance =
@@ -70,6 +71,12 @@ const COLOR_TOKENS: Record<TagColor, ColorTokens> = {
     border: 'var(--color-orange-300)',
     dot: 'var(--color-orange-500)',
   },
+  yellow: {
+    text: 'var(--color-yellow-800)',
+    bg: 'var(--color-yellow-50)',
+    border: 'var(--color-yellow-300)',
+    dot: 'var(--color-yellow-700)',
+  },
   error: {
     text: 'var(--color-red-500)',
     bg: 'var(--color-red-50)',
@@ -83,10 +90,10 @@ const COLOR_TOKENS: Record<TagColor, ColorTokens> = {
     dot: 'var(--color-red-500)',
   },
   info: {
-    text: 'var(--color-cyan-500)',
-    bg: 'var(--color-cyan-50)',
-    border: 'var(--color-cyan-300)',
-    dot: 'var(--color-cyan-500)',
+    text: 'var(--color-primary-500)',
+    bg: 'var(--color-primary-50)',
+    border: 'var(--color-primary-300)',
+    dot: 'var(--color-primary-500)',
   },
   purple: {
     text: 'var(--color-purple-500)',

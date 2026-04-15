@@ -315,11 +315,12 @@ function NotifAvatar({ msg }: { msg: Message }) {
 
 // ─── Severity → Tag color map ─────────────────────────────────────────────
 
-const SEVERITY_TAG_COLOR: Record<Severity, 'critical' | 'error' | 'warning' | 'info'> = {
+// Critical=Red  High=Orange  Medium=Yellow  Low=Grey
+const SEVERITY_TAG_COLOR: Record<Severity, 'critical' | 'warning' | 'yellow' | 'neutral'> = {
   critical: 'critical',
   high: 'warning',
-  medium: 'warning',
-  low: 'info',
+  medium: 'yellow',
+  low: 'neutral',
 };
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────

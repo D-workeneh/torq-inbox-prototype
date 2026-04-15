@@ -38,6 +38,9 @@ import {
   Target,
   Database,
   AlertTriangle,
+  AlertOctagon,
+  AlertCircle,
+  Info as InfoIcon,
   Clock,
   ExternalLink,
   Activity,
@@ -444,9 +447,9 @@ function PageShell({
   );
 }
 
-type SectionBadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
-const SECTION_BADGE_COLOR: Record<SectionBadgeVariant, 'neutral' | 'success' | 'warning' | 'error' | 'primary'> = {
-  default: 'neutral', success: 'success', warning: 'warning', error: 'error', info: 'primary',
+type SectionBadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info' | 'yellow';
+const SECTION_BADGE_COLOR: Record<SectionBadgeVariant, 'neutral' | 'success' | 'warning' | 'error' | 'primary' | 'yellow'> = {
+  default: 'neutral', success: 'success', warning: 'warning', error: 'error', info: 'primary', yellow: 'yellow',
 };
 
 function SectionBadge({ label, variant = 'default' }: { label: string; variant?: SectionBadgeVariant }) {
@@ -525,8 +528,15 @@ const CASES_DATA = [
   { id: 'CASE-1007', title: 'SSL certificate tampering detected',         severity: 'Medium',   status: 'Resolved',     assignee: 'John Davis',     date: 'Apr 10, 2026' },
 ];
 
-const CASE_SEVERITY_STYLE: Record<string, string> = {
-  Critical: 'error', High: 'warning', Medium: 'info', Low: 'default',
+// Critical=Red  High=Orange  Medium=Yellow  Low=Grey  (matches Tag color tokens)
+const CASE_SEVERITY_TAG: Record<string, {
+  color: 'critical' | 'warning' | 'yellow' | 'neutral';
+  Icon: React.ElementType;
+}> = {
+  Critical: { color: 'critical', Icon: AlertOctagon },
+  High:     { color: 'warning',  Icon: AlertTriangle },
+  Medium:   { color: 'yellow',   Icon: AlertCircle },
+  Low:      { color: 'neutral',  Icon: InfoIcon },
 };
 const CASE_STATUS_STYLE: Record<string, string> = {
   Open: 'error', 'In Progress': 'info', 'Under Review': 'warning', Escalated: 'error', Resolved: 'success',
@@ -563,7 +573,9 @@ function CasesPage() {
             <tr key={c.id} className="border-b border-[var(--color-border-1)] hover:bg-[var(--color-surface-tertiary)] transition-colors cursor-pointer">
               <td className="px-4 py-3 text-[var(--font-size-sm)] text-[var(--color-text-tertiary)] font-mono">{c.id}</td>
               <td className="px-4 py-3 text-[var(--font-size-sm)] text-[var(--color-text-primary)] font-medium max-w-xs truncate">{c.title}</td>
-              <td className="px-4 py-3"><SectionBadge label={c.severity} variant={CASE_SEVERITY_STYLE[c.severity] as never} /></td>
+              <td className="px-4 py-3">
+                {(() => { const s = CASE_SEVERITY_TAG[c.severity]; return s ? <Tag color={s.color} appearance="bordered" size="md" icon={<s.Icon />}>{c.severity}</Tag> : <SectionBadge label={c.severity} />; })()}
+              </td>
               <td className="px-4 py-3"><SectionBadge label={c.status} variant={CASE_STATUS_STYLE[c.status] as never} /></td>
               <td className="px-4 py-3 text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">{c.assignee}</td>
               <td className="px-4 py-3 text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">{c.date}</td>
