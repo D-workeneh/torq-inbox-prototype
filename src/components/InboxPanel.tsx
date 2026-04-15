@@ -485,7 +485,7 @@ function MessageRow({
         </p>
 
         {/* Row 3: body preview — grey, single line */}
-        <p className="text-[var(--font-size-xs)] text-[#777A86] truncate leading-relaxed mb-2">
+        <p className="text-[var(--font-size-xs)] truncate leading-relaxed mb-2" style={{ color: '#777A86' }}>
           {msg.preview}
         </p>
 
