@@ -498,10 +498,10 @@ function MessageRow({
               <span className="text-[var(--font-size-xs)] text-[var(--color-purple-500)] font-medium truncate min-w-0">{msg.approvalAction}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
+              <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
                 Approve
               </Button>
-              <Button variant="tertiary" size="sm" fullWidth leftIcon={<XCircle />} onClick={() => onReject(msg.id)}>
+              <Button variant="tertiary" size="sm" leftIcon={<XCircle />} onClick={() => onReject(msg.id)}>
                 Reject
               </Button>
             </div>
@@ -528,10 +528,10 @@ function MessageRow({
         {/* ── Workspace invite: Accept / Decline buttons ── */}
         {isInvite && msg.inviteState === 'pending' && (
           <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-            <Button variant="secondary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
+            <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
               Accept
             </Button>
-            <Button variant="tertiary" size="sm" fullWidth onClick={() => onDeclineInvite(msg.id)}>
+            <Button variant="tertiary" size="sm" onClick={() => onDeclineInvite(msg.id)}>
               Decline
             </Button>
           </div>
