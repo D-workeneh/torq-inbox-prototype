@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -214,7 +214,7 @@ const INITIAL_MESSAGES: Message[] = [
     subHeader: 'Mentioned you · CASE-1003',
     preview: '@david.w The phishing campaign targets CFO emails specifically. Can you review the email headers I attached and validate the IOCs?',
     severity: 'medium',
-    time: '2h ago',
+    time: '2d ago',
     isRead: true,
     workspace: 'torq-dev',
     isArchived: false,
@@ -227,7 +227,7 @@ const INITIAL_MESSAGES: Message[] = [
     subHeader: 'Workflow failed · Threat Intel Enrichment',
     preview: 'Failed at step 3 — VirusTotal lookup. Error: Invalid API key. 12 IOCs were left unenriched and may require manual threat intelligence review.',
     severity: 'high',
-    time: '3h ago',
+    time: '4d ago',
     isRead: true,
     workspace: 'torq-staging',
     isArchived: false,
@@ -240,7 +240,7 @@ const INITIAL_MESSAGES: Message[] = [
     subHeader: 'Invited you · Acme Corp',
     preview: 'Alex Kim has invited you to join the Acme Corp MSSP workspace. Accept to access their shared security workflows and case dashboards.',
     severity: 'low',
-    time: '5h ago',
+    time: '2w ago',
     isRead: true,
     workspace: 'acme-corp',
     isArchived: false,
@@ -253,13 +253,39 @@ const INITIAL_MESSAGES: Message[] = [
     subHeader: 'Shared workflow · Phishing Response Playbook',
     preview: 'Sarah Chen shared this workflow with you. It includes automated email header analysis, user notification, and remediation orchestration.',
     severity: 'low',
-    time: '8h ago',
+    time: '3w ago',
     isRead: true,
     workspace: 'torq-prod',
     isArchived: false,
     targetPage: 'workflows',
   },
 ];
+
+// ─── Time grouping ─────────────────────────────────────────────────────────
+
+function getTimeGroup(time: string): string {
+  const m = time.match(/^(\d+)(m|h|d|w)\s+ago$/);
+  if (!m) return 'Earlier';
+  const val = parseInt(m[1]);
+  const unit = m[2];
+  let minutes = val;
+  if (unit === 'h') minutes = val * 60;
+  if (unit === 'd') minutes = val * 60 * 24;
+  if (unit === 'w') minutes = val * 60 * 24 * 7;
+  if (minutes < 60 * 24) return 'Today';
+  if (minutes < 60 * 24 * 7) return 'This week';
+  return 'Earlier';
+}
+
+function TimeSectionHeader({ label }: { label: string }) {
+  return (
+    <div className="px-4 pt-4 pb-1.5">
+      <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide select-none">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 // ─── Source avatar colors ──────────────────────────────────────────────────
 
@@ -1456,9 +1482,21 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
             ) : (
               <motion.div layout>
                 <AnimatePresence mode="popLayout">
-                  {inboxVisible.map((msg) => (
-                    <MessageRow key={msg.id} msg={msg} view={view} onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
-                  ))}
+                  {(() => {
+                    const items: React.ReactNode[] = [];
+                    let lastGroup = '';
+                    inboxVisible.forEach((msg) => {
+                      const group = getTimeGroup(msg.time);
+                      if (group !== lastGroup) {
+                        lastGroup = group;
+                        items.push(<TimeSectionHeader key={`header-${group}`} label={group} />);
+                      }
+                      items.push(
+                        <MessageRow key={msg.id} msg={msg} view={view} onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
+                      );
+                    });
+                    return items;
+                  })()}
                 </AnimatePresence>
               </motion.div>
             )}
@@ -1601,9 +1639,21 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                   ) : (
                     <motion.div layout>
                       <AnimatePresence mode="popLayout">
-                        {archiveVisible.map((msg) => (
-                          <MessageRow key={msg.id} msg={msg} view="archive" onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
-                        ))}
+                        {(() => {
+                          const items: React.ReactNode[] = [];
+                          let lastGroup = '';
+                          archiveVisible.forEach((msg) => {
+                            const group = getTimeGroup(msg.time);
+                            if (group !== lastGroup) {
+                              lastGroup = group;
+                              items.push(<TimeSectionHeader key={`header-${group}`} label={group} />);
+                            }
+                            items.push(
+                              <MessageRow key={msg.id} msg={msg} view="archive" onMarkRead={handleMarkRead} onArchive={handleArchive} onRestore={handleRestore} onApprove={handleApprove} onReject={handleReject} onAcceptInvite={handleAcceptInvite} onDeclineInvite={handleDeclineInvite} onUndoApproval={handleUndoApproval} onUndoInvite={handleUndoInvite} onNavigate={onNavigate} />
+                            );
+                          });
+                          return items;
+                        })()}
                       </AnimatePresence>
                     </motion.div>
                   )}
