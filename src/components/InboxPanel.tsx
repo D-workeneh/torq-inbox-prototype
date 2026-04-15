@@ -33,6 +33,7 @@ import {
   ThumbsUp,
   XCircle,
   FolderOpen,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Tag, SeverityTag } from '@/components/ui/Tag';
@@ -281,20 +282,47 @@ function avatarColor(source: string) {
 
 // ─── Notification Avatar ───────────────────────────────────────────────────
 
+/** Torq wordmark — three left-aligned bars of decreasing width */
+function TorqLogoMark() {
+  return (
+    <svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0"  width="20" height="3" rx="1.5" fill="white"/>
+      <rect x="0" y="5.5" width="13" height="3" rx="1.5" fill="white"/>
+      <rect x="0" y="11" width="7"  height="3" rx="1.5" fill="white"/>
+    </svg>
+  );
+}
+
 function NotifAvatar({ msg }: { msg: Message }) {
   const isSocrates = msg.type === 'socrates-approval';
+  const isTorq = msg.source === 'Torq';
   const typeCfg = TYPE_CONFIG[msg.type];
   const TypeIconEl = typeCfg.Icon;
+
+  const badge = (
+    <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
+      <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
+    </span>
+  );
 
   if (isSocrates) {
     return (
       <div className="relative shrink-0">
-        <div className="h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-bold select-none bg-[#7C5CFC] text-white">
-          S
+        <div className="h-9 w-9 rounded-full flex items-center justify-center select-none bg-[#7C5CFC] text-white">
+          <Bot className="h-[18px] w-[18px]" strokeWidth={2} />
         </div>
-        <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
-          <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
-        </span>
+        {badge}
+      </div>
+    );
+  }
+
+  if (isTorq) {
+    return (
+      <div className="relative shrink-0">
+        <div className="h-9 w-9 rounded-full flex items-center justify-center select-none bg-[var(--color-neutral-900)]">
+          <TorqLogoMark />
+        </div>
+        {badge}
       </div>
     );
   }
@@ -308,9 +336,7 @@ function NotifAvatar({ msg }: { msg: Message }) {
         style={{ backgroundColor: color.bg, color: color.text }}>
         {initials}
       </div>
-      <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
-        <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
-      </span>
+      {badge}
     </div>
   );
 }
