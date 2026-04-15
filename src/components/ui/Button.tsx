@@ -91,9 +91,9 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'h-7 px-3 gap-1.5 rounded-[var(--radius-sm)] text-[var(--font-size-sm)] font-semibold',
-  md: 'h-8 px-4 gap-2 rounded-[var(--radius-md)] text-[var(--font-size-base)] font-semibold',
-  lg: 'h-10 px-5 gap-2 rounded-[var(--radius-md)] text-[var(--font-size-md)] font-semibold',
+  sm: 'h-7 px-3 gap-1.5 rounded-[var(--radius-sm)] text-[var(--font-size-sm)] font-medium',
+  md: 'h-8 px-4 gap-2 rounded-[var(--radius-md)] text-[var(--font-size-base)] font-medium',
+  lg: 'h-10 px-5 gap-2 rounded-[var(--radius-md)] text-[var(--font-size-md)] font-medium',
 };
 
 const ICON_SIZE: Record<ButtonSize, string> = {
