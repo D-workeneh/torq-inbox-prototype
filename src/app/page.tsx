@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/components/ui/Button';
+import { Tag } from '@/components/ui/Tag';
 import {
   Workflow,
   Search as SearchLucide,
@@ -442,19 +444,13 @@ function PageShell({
   );
 }
 
-function SectionBadge({ label, variant = 'default' }: { label: string; variant?: 'default' | 'success' | 'warning' | 'error' | 'info' }) {
-  const styles: Record<string, string> = {
-    default: 'bg-[var(--color-neutral-100)] text-[var(--color-text-secondary)]',
-    success: 'bg-[#e6faf3] text-[#29CA88]',
-    warning: 'bg-[#fff4e6] text-[#FF8E2E]',
-    error:   'bg-[#ffeaea] text-[#EA231A]',
-    info:    'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]',
-  };
-  return (
-    <span className={`inline-flex items-center rounded-[var(--radius-sm)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${styles[variant]}`}>
-      {label}
-    </span>
-  );
+type SectionBadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info';
+const SECTION_BADGE_COLOR: Record<SectionBadgeVariant, 'neutral' | 'success' | 'warning' | 'error' | 'primary'> = {
+  default: 'neutral', success: 'success', warning: 'warning', error: 'error', info: 'primary',
+};
+
+function SectionBadge({ label, variant = 'default' }: { label: string; variant?: SectionBadgeVariant }) {
+  return <Tag color={SECTION_BADGE_COLOR[variant]} appearance="subtle" size="md">{label}</Tag>;
 }
 
 // ─── Integrations page ─────────────────────────────────────────────────────
@@ -478,9 +474,7 @@ function IntegrationsPage() {
   return (
     <PageShell title="Integrations" subtitle="Connect your tools and services" icon={Plug}
       action={
-        <button className="flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-          <Plus className="h-4 w-4" />Browse catalog
-        </button>
+        <Button variant="primary" leftIcon={<Plus />}>Browse catalog</Button>
       }
     >
       <div className="p-6">
@@ -542,9 +536,7 @@ function CasesPage() {
   return (
     <PageShell title="Cases" subtitle={`${CASES_DATA.filter(c => c.status !== 'Resolved').length} open cases`} icon={Shield}
       action={
-        <button className="flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-          <Plus className="h-4 w-4" />New Case
-        </button>
+        <Button variant="primary" leftIcon={<Plus />}>New Case</Button>
       }
     >
       <div className="px-6 py-3 flex items-center gap-2 border-b border-[var(--color-border-1)]">
@@ -598,9 +590,7 @@ function WorkspaceVariablesPage() {
   return (
     <PageShell title="Workspace Variables" subtitle="Reusable values shared across workflows" icon={Variable}
       action={
-        <button className="flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-          <Plus className="h-4 w-4" />New Variable
-        </button>
+        <Button variant="primary" leftIcon={<Plus />}>New Variable</Button>
       }
     >
       <table className="w-full">
@@ -641,9 +631,7 @@ function TemplatesPage() {
   return (
     <PageShell title="Templates" subtitle="Ready-made workflow templates for common security scenarios" icon={FileText}
       action={
-        <button className="flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-          <Plus className="h-4 w-4" />New Template
-        </button>
+        <Button variant="primary" leftIcon={<Plus />}>New Template</Button>
       }
     >
       <div className="p-6 grid grid-cols-2 xl:grid-cols-3 gap-4">
@@ -887,9 +875,7 @@ function CaseDashboardsPage() {
   return (
     <PageShell title="Case Dashboards" subtitle="Custom dashboards for security operations" icon={LayoutDashboard}
       action={
-        <button className="flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-          <Plus className="h-4 w-4" />New Dashboard
-        </button>
+        <Button variant="primary" leftIcon={<Plus />}>New Dashboard</Button>
       }
     >
       <div className="p-6 grid grid-cols-2 gap-4">
@@ -1238,13 +1224,10 @@ export default function Home() {
               Workflows
             </h1>
             <div className="flex items-center">
-              <button className="flex items-center gap-1.5 rounded-l-[var(--radius-md)] bg-[var(--color-primary-500)] px-4 py-2 text-[var(--font-size-sm)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors">
-                <Plus className="h-4 w-4" />
-                Create
-              </button>
-              <button className="flex items-center rounded-r-[var(--radius-md)] border-l border-[var(--color-primary-700)] bg-[var(--color-primary-500)] px-2 py-2 text-white hover:bg-[var(--color-primary-700)] transition-colors">
+              <Button variant="primary" leftIcon={<Plus />} className="!rounded-r-none">Create</Button>
+              <Button variant="primary" className="!rounded-l-none !border-l !border-[var(--color-primary-700)] !px-2">
                 <ChevronDown className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -1260,14 +1243,11 @@ export default function Home() {
               />
             </div>
             {(['State', 'Triggered from', 'Shared', 'Tags'] as const).map((label) => (
-              <button
-                key={label}
-                className="flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-3 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+              <Button key={label} variant="secondary" size="sm"
+                rightIcon={<ChevronDown className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />}
               >
-                {label}
-                <span className="text-[var(--color-text-tertiary)] text-[var(--font-size-xs)] ml-0.5">All</span>
-                <ChevronDown className="h-3 w-3 text-[var(--color-text-tertiary)] ml-0.5" />
-              </button>
+                {label} <span className="text-[var(--color-text-tertiary)]">All</span>
+              </Button>
             ))}
           </div>
 

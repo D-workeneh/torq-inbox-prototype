@@ -34,6 +34,8 @@ import {
   XCircle,
   FolderOpen,
 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Tag } from '@/components/ui/Tag';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -311,18 +313,14 @@ function NotifAvatar({ msg }: { msg: Message }) {
   );
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────
+// ─── Severity → Tag color map ─────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: Severity }) {
-  const cfg = SEVERITY_CONFIG[severity];
-  const Icon = cfg.Icon;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-      <Icon className="h-2.5 w-2.5" />
-      {cfg.label}
-    </span>
-  );
-}
+const SEVERITY_TAG_COLOR: Record<Severity, 'critical' | 'error' | 'warning' | 'info'> = {
+  critical: 'critical',
+  high: 'warning',
+  medium: 'warning',
+  low: 'info',
+};
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────
 // Renders into document.body via portal so it is never clipped by any container.
@@ -491,23 +489,17 @@ function MessageRow({
         {/* ── Socrates: approval action chip + Approve / Reject buttons ── */}
         {isSocrates && msg.approvalState === 'pending' && (
           <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-1.5 mb-2.5 rounded-[var(--radius-sm)] bg-[#f3f0ff] border border-[#d4c9ff] px-2.5 py-1.5">
-              <ThumbsUp className="h-3 w-3 text-[#7C5CFC] shrink-0" />
-              <span className="text-[var(--font-size-xs)] text-[#5B3FC8] font-medium leading-snug truncate">{msg.approvalAction}</span>
-            </div>
+            <Tag color="purple" appearance="bordered" size="md" icon={<ThumbsUp />} className="mb-2.5 w-full !rounded-[var(--radius-sm)]">
+              <span className="truncate">{msg.approvalAction}</span>
+            </Tag>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => onApprove(msg.id)}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-[#29CA88] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-white hover:bg-[#23b077] transition-colors"
-              >
-                <Check className="h-3.5 w-3.5" />Approve
-              </button>
-              <button
-                onClick={() => onReject(msg.id)}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-[var(--color-red-500)] hover:bg-[#ffeaea] transition-colors"
-              >
-                <XCircle className="h-3.5 w-3.5" />Reject
-              </button>
+              <Button variant="success" size="sm" fullWidth leftIcon={<Check />} onClick={() => onApprove(msg.id)}>
+                Approve
+              </Button>
+              <Button variant="secondary" size="sm" fullWidth leftIcon={<XCircle />} onClick={() => onReject(msg.id)}
+                className="!text-[var(--color-red-500)] hover:!text-[var(--color-red-500)]">
+                Reject
+              </Button>
             </div>
           </div>
         )}
@@ -532,18 +524,12 @@ function MessageRow({
         {/* ── Workspace invite: Accept / Decline buttons ── */}
         {isInvite && msg.inviteState === 'pending' && (
           <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => onAcceptInvite(msg.id)}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--color-primary-500)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-white hover:bg-[var(--color-primary-700)] transition-colors"
-            >
-              <Check className="h-3.5 w-3.5" />Accept
-            </button>
-            <button
-              onClick={() => onDeclineInvite(msg.id)}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-3 py-1.5 text-[var(--font-size-xs)] font-semibold text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
-            >
+            <Button variant="primary" size="sm" fullWidth leftIcon={<Check />} onClick={() => onAcceptInvite(msg.id)}>
+              Accept
+            </Button>
+            <Button variant="secondary" size="sm" fullWidth onClick={() => onDeclineInvite(msg.id)}>
               Decline
-            </button>
+            </Button>
           </div>
         )}
 
@@ -566,14 +552,14 @@ function MessageRow({
 
         {/* Meta row: type badge + workspace chip */}
         <div className="flex items-center gap-1.5 mt-1.5">
-          <span className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium"
-            style={{ backgroundColor: `${TYPE_CONFIG[msg.type].color}14`, color: TYPE_CONFIG[msg.type].color }}>
+          <Tag color="neutral" appearance="subtle" size="sm"
+            className="!rounded-[var(--radius-sm)]"
+            style={{ backgroundColor: `${TYPE_CONFIG[msg.type].color}14`, color: TYPE_CONFIG[msg.type].color } as React.CSSProperties}>
             {TYPE_CONFIG[msg.type].label}
-          </span>
-          <span className="flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-surface-tertiary)] px-1.5 py-0.5 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
-            <Building2 className="h-3 w-3 shrink-0" />
+          </Tag>
+          <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
             {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}
-          </span>
+          </Tag>
         </div>
       </div>
 
@@ -1421,27 +1407,26 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                 const cfg = SEVERITY_CONFIG[s];
                 const Icon = cfg.Icon;
                 return (
-                  <span key={s} className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-                    <Icon className="h-3 w-3" />
+                  <Tag key={s} color={SEVERITY_TAG_COLOR[s]} appearance="bordered" size="sm"
+                    icon={<Icon />} onRemove={() => removeSeverityFilter(s)}>
                     {cfg.label}
-                    <button onClick={() => removeSeverityFilter(s)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
-                  </span>
+                  </Tag>
                 );
               })}
               {filter.notifTypes.map((id) => {
                 const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
                 const Icon = cfg.Icon;
                 return (
-                  <span key={id} className="inline-flex items-center gap-1 rounded-[var(--radius-full)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
-                    <Icon className="h-3 w-3" />
+                  <Tag key={id} color="neutral" appearance="surface" size="sm"
+                    icon={<Icon />} onRemove={() => removeNotifTypeFilter(id)}>
                     {cfg.label}
-                    <button onClick={() => removeNotifTypeFilter(id)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
-                  </span>
+                  </Tag>
                 );
               })}
-              <button onClick={() => setFilter({ notifTypes: [], severities: [] })} className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors ml-0.5">
+              <Button variant="ghost" size="sm" onClick={() => setFilter({ notifTypes: [], severities: [] })}
+                className="!h-auto !px-1.5 !py-0.5 !text-[var(--font-size-xs)] !text-[var(--color-text-tertiary)] hover:!text-[var(--color-red-500)]">
                 Clear all
-              </button>
+              </Button>
             </div>
           )}
 
@@ -1574,27 +1559,26 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                       const cfg = SEVERITY_CONFIG[s];
                       const Icon = cfg.Icon;
                       return (
-                        <span key={s} className={`inline-flex items-center gap-1 rounded-[var(--radius-full)] border px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${cfg.color} ${cfg.bg} ${cfg.border}`}>
-                          <Icon className="h-3 w-3" />
+                        <Tag key={s} color={SEVERITY_TAG_COLOR[s]} appearance="bordered" size="sm"
+                          icon={<Icon />} onRemove={() => removeSeverityFilter(s)}>
                           {cfg.label}
-                          <button onClick={() => removeSeverityFilter(s)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
-                        </span>
+                        </Tag>
                       );
                     })}
                     {filter.notifTypes.map((id) => {
                       const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
                       const Icon = cfg.Icon;
                       return (
-                        <span key={id} className="inline-flex items-center gap-1 rounded-[var(--radius-full)] border border-[var(--color-border-2)] bg-[var(--color-surface-tertiary)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
-                          <Icon className="h-3 w-3" />
+                        <Tag key={id} color="neutral" appearance="surface" size="sm"
+                          icon={<Icon />} onRemove={() => removeNotifTypeFilter(id)}>
                           {cfg.label}
-                          <button onClick={() => removeNotifTypeFilter(id)} className="ml-0.5 rounded-full opacity-60 hover:opacity-100 transition-opacity"><X className="h-3 w-3" /></button>
-                        </span>
+                        </Tag>
                       );
                     })}
-                    <button onClick={() => setFilter({ notifTypes: [], severities: [] })} className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors ml-0.5">
+                    <Button variant="ghost" size="sm" onClick={() => setFilter({ notifTypes: [], severities: [] })}
+                      className="!h-auto !px-1.5 !py-0.5 !text-[var(--font-size-xs)] !text-[var(--color-text-tertiary)] hover:!text-[var(--color-red-500)]">
                       Clear all
-                    </button>
+                    </Button>
                   </div>
                 )}
 
