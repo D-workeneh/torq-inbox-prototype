@@ -477,7 +477,7 @@ function IntegrationsPage() {
   return (
     <PageShell title="Integrations" subtitle="Connect your tools and services" icon={Plug}
       action={
-        <Button variant="primary" leftIcon={<Plus />}>Browse catalog</Button>
+        <Button variant="dark" leftIcon={<Plus />}>Browse catalog</Button>
       }
     >
       <div className="p-6">
@@ -546,7 +546,7 @@ function CasesPage() {
   return (
     <PageShell title="Cases" subtitle={`${CASES_DATA.filter(c => c.status !== 'Resolved').length} open cases`} icon={Shield}
       action={
-        <Button variant="primary" leftIcon={<Plus />}>New Case</Button>
+        <Button variant="dark" leftIcon={<Plus />}>New Case</Button>
       }
     >
       <div className="px-6 py-3 flex items-center gap-2 border-b border-[var(--color-border-1)]">
@@ -602,7 +602,7 @@ function WorkspaceVariablesPage() {
   return (
     <PageShell title="Workspace Variables" subtitle="Reusable values shared across workflows" icon={Variable}
       action={
-        <Button variant="primary" leftIcon={<Plus />}>New Variable</Button>
+        <Button variant="dark" leftIcon={<Plus />}>New Variable</Button>
       }
     >
       <table className="w-full">
@@ -643,7 +643,7 @@ function TemplatesPage() {
   return (
     <PageShell title="Templates" subtitle="Ready-made workflow templates for common security scenarios" icon={FileText}
       action={
-        <Button variant="primary" leftIcon={<Plus />}>New Template</Button>
+        <Button variant="dark" leftIcon={<Plus />}>New Template</Button>
       }
     >
       <div className="p-6 grid grid-cols-2 xl:grid-cols-3 gap-4">
@@ -887,7 +887,7 @@ function CaseDashboardsPage() {
   return (
     <PageShell title="Case Dashboards" subtitle="Custom dashboards for security operations" icon={LayoutDashboard}
       action={
-        <Button variant="primary" leftIcon={<Plus />}>New Dashboard</Button>
+        <Button variant="dark" leftIcon={<Plus />}>New Dashboard</Button>
       }
     >
       <div className="p-6 grid grid-cols-2 gap-4">
@@ -1236,8 +1236,8 @@ export default function Home() {
               Workflows
             </h1>
             <div className="flex items-center">
-              <Button variant="primary" leftIcon={<Plus />} className="!rounded-r-none">Create</Button>
-              <Button variant="primary" className="!rounded-l-none !border-l !border-[var(--color-primary-700)] !px-2">
+              <Button variant="dark" leftIcon={<Plus />} className="!rounded-r-none">Create</Button>
+              <Button variant="dark" className="!rounded-l-none !px-2">
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </div>
