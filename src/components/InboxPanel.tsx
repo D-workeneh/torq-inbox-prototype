@@ -1313,7 +1313,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
           className="relative shrink-0 h-full overflow-hidden bg-[var(--color-surface-primary)] flex flex-col"
-          style={{ minWidth: 0, boxShadow: '8px 0 32px 0 rgba(0,0,0,0.13), 1px 0 0 0 var(--color-border-2)', clipPath: 'inset(0 -60px 0 0)' }}
+          style={{ minWidth: 0, boxShadow: '12px 0 40px 0 rgba(0,0,0,0.08), 1px 0 0 0 rgba(0,0,0,0.06)', clipPath: 'inset(0 -60px 0 0)' }}
         >
 
           {/* ══════════════════════════════════════════════════
