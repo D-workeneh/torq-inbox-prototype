@@ -554,20 +554,21 @@ function MessageRow({
         )}
 
         {/* Meta row: severity + type badge + workspace chip */}
-        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-          <SeverityTag level={msg.severity as SeverityLevel} size="sm" />
-          <Tag
-            color={TYPE_CONFIG[msg.type].tagColor}
-            appearance="subtle"
-            size="sm"
-            icon={<TYPE_CONFIG[msg.type].Icon />}
-          >
-            {TYPE_CONFIG[msg.type].label}
-          </Tag>
-          <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
-            {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}
-          </Tag>
-        </div>
+        {(() => {
+          const typeCfg = TYPE_CONFIG[msg.type];
+          const TypeIcon = typeCfg.Icon;
+          return (
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <SeverityTag level={msg.severity as SeverityLevel} size="sm" />
+              <Tag color={typeCfg.tagColor} appearance="subtle" size="sm" icon={<TypeIcon />}>
+                {typeCfg.label}
+              </Tag>
+              <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
+                {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}
+              </Tag>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Hover action buttons */}
