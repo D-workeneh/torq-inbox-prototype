@@ -1293,6 +1293,8 @@ export default function Home() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('notifications');
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const workspaceBtnRef = useRef<HTMLButtonElement>(null);
 
   function navigate(pageId: string) {
@@ -1604,6 +1606,7 @@ export default function Home() {
                 value={searchVal}
                 onChange={(e) => setSearchVal(e.target.value)}
                 placeholder="Search"
+                suppressHydrationWarning
                 className="w-full rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] pl-8 pr-3 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:border-[var(--color-primary-500)] transition-colors"
               />
             </div>
@@ -1658,7 +1661,7 @@ export default function Home() {
 
       {/* ── Settings Modal ─────────────────────────────────────────────── */}
       <AnimatePresence>
-        {settingsOpen && createPortal(
+        {mounted && settingsOpen && createPortal(
           <motion.div
             key="settings-backdrop"
             initial={{ opacity: 0 }}
