@@ -1193,6 +1193,7 @@ function MoreMenu({
   onArchiveRead,
   onViewArchive,
   onClose,
+  onNavigate,
   anchorEl,
 }: {
   onMarkAllRead: () => void;
@@ -1200,6 +1201,7 @@ function MoreMenu({
   onArchiveRead: () => void;
   onViewArchive: () => void;
   onClose: () => void;
+  onNavigate: (pageId: string) => void;
   anchorEl: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1248,7 +1250,7 @@ function MoreMenu({
         View archive
       </button>
       <div className="my-1 border-t border-[var(--color-border-1)]" />
-      <button onClick={onClose} className={btnClass}>
+      <button onClick={() => { onNavigate('settings-notifications'); onClose(); }} className={btnClass}>
         <Settings2 className="h-3.5 w-3.5 shrink-0" />
         Notifications settings
       </button>
@@ -1530,6 +1532,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                   <MoreMenu anchorEl={moreBtnRef.current} onMarkAllRead={handleMarkAllRead}
                     onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
                     onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
+                    onNavigate={onNavigate}
                   />
                 )}
               </AnimatePresence>
@@ -1713,6 +1716,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                         <MoreMenu anchorEl={archiveMoreBtnRef.current} onMarkAllRead={handleMarkAllRead}
                           onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
                           onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
+                          onNavigate={onNavigate}
                         />
                       )}
                     </AnimatePresence>

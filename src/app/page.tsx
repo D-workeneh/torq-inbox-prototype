@@ -47,6 +47,24 @@ import {
   Globe,
   Layers,
   Zap,
+  Bell,
+  Users,
+  UserCog,
+  Lock,
+  KeyRound,
+  ShieldCheck,
+  NetworkIcon,
+  Download,
+  Briefcase,
+  Cpu,
+  Mail,
+  Smartphone,
+  Moon,
+  Zap as ZapIcon,
+  ChevronDown as ChevronDownIcon,
+  ToggleLeft,
+  ToggleRight,
+  Minus,
 } from 'lucide-react';
 import { InboxPanel } from '@/components/InboxPanel';
 
@@ -934,6 +952,310 @@ function ComingSoonPage({ title, icon: Icon }: { title: string; icon: React.Elem
   );
 }
 
+// ─── Settings Page ─────────────────────────────────────────────────────────
+
+type SettingsSection = 'general' | 'members' | 'groups' | 'security-sso' | 'security-roles' | 'security-advanced' | 'security-ip' | 'log-export' | 'cases' | 'socrates-tools' | 'notifications';
+
+const SETTINGS_NAV: { id: SettingsSection; label: string; icon: React.ElementType; sub?: { id: SettingsSection; label: string }[] }[] = [
+  { id: 'general',        label: 'General',       icon: SettingsIcon },
+  { id: 'members',        label: 'Members',        icon: Users },
+  { id: 'groups',         label: 'Groups',         icon: UserCog },
+  { id: 'security-sso',   label: 'Security',       icon: ShieldCheck, sub: [
+    { id: 'security-sso',      label: 'SSO' },
+    { id: 'security-roles',    label: 'Roles' },
+    { id: 'security-advanced', label: 'Advanced' },
+    { id: 'security-ip',       label: 'Workspace IP' },
+  ]},
+  { id: 'log-export',     label: 'Log export',     icon: Download },
+  { id: 'cases',          label: 'Cases',          icon: Briefcase },
+  { id: 'socrates-tools', label: 'Socrates Tools', icon: Cpu },
+  { id: 'notifications',  label: 'Notifications',  icon: Bell },
+];
+
+// ── Notification Settings ──────────────────────────────────────────────────
+
+type ChannelKey = 'inapp' | 'email';
+type TopicKey = 'system-updates' | 'system-billing' | 'system-security' | 'socrates-approval' | 'socrates-task' | 'socrates-confidence' | 'mentions-case' | 'mentions-comment' | 'workflows-failures' | 'workflows-completions' | 'workflows-runner' | 'cases-assignments' | 'cases-sla' | 'cases-status';
+
+type ChannelState = Record<TopicKey, Record<ChannelKey, boolean>>;
+
+const TOPIC_GROUPS = [
+  { group: 'System', items: [
+    { id: 'system-updates'    as TopicKey, label: 'Workspace updates' },
+    { id: 'system-billing'    as TopicKey, label: 'Billing alerts' },
+    { id: 'system-security'   as TopicKey, label: 'Security alerts' },
+  ]},
+  { group: 'Socrates AI', items: [
+    { id: 'socrates-approval'   as TopicKey, label: 'Approval requests' },
+    { id: 'socrates-task'       as TopicKey, label: 'Task completions' },
+    { id: 'socrates-confidence' as TopicKey, label: 'Confidence alerts' },
+  ]},
+  { group: 'Mentions', items: [
+    { id: 'mentions-case'    as TopicKey, label: 'Case mentions' },
+    { id: 'mentions-comment' as TopicKey, label: 'Comment mentions' },
+  ]},
+  { group: 'Workflows', items: [
+    { id: 'workflows-failures'    as TopicKey, label: 'Failures' },
+    { id: 'workflows-completions' as TopicKey, label: 'Completions' },
+    { id: 'workflows-runner'      as TopicKey, label: 'Runner health' },
+  ]},
+  { group: 'Cases', items: [
+    { id: 'cases-assignments' as TopicKey, label: 'Assignments' },
+    { id: 'cases-sla'         as TopicKey, label: 'SLA breaches' },
+    { id: 'cases-status'      as TopicKey, label: 'Status changes' },
+  ]},
+];
+
+function buildDefaultChannels(): ChannelState {
+  const state: Partial<ChannelState> = {};
+  TOPIC_GROUPS.forEach(g => g.items.forEach(item => {
+    state[item.id] = { inapp: true, email: item.id.startsWith('system') || item.id === 'socrates-approval' || item.id === 'mentions-case' };
+  }));
+  return state as ChannelState;
+}
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none ${on ? 'bg-[var(--color-neutral-800)]' : 'bg-[var(--color-neutral-200)]'}`}
+    >
+      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${on ? 'translate-x-4' : 'translate-x-0'}`} />
+    </button>
+  );
+}
+
+function ChannelCheckbox({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={`h-4 w-4 rounded-[3px] border transition-colors flex items-center justify-center shrink-0 ${on ? 'bg-[var(--color-neutral-800)] border-[var(--color-neutral-800)]' : 'bg-white border-[var(--color-border-3)]'}`}
+    >
+      {on && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+    </button>
+  );
+}
+
+function NotificationSettingsContent() {
+  const [quietHours, setQuietHours]   = useState(true);
+  const [quietFrom, setQuietFrom]     = useState('22:00');
+  const [quietTo, setQuietTo]         = useState('08:00');
+  const [stormOn, setStormOn]         = useState(true);
+  const [stormThreshold, setStormThreshold] = useState(10);
+  const [channels, setChannels]       = useState<ChannelState>(buildDefaultChannels());
+
+  function toggleChannel(topic: TopicKey, ch: ChannelKey) {
+    setChannels(prev => ({ ...prev, [topic]: { ...prev[topic], [ch]: !prev[topic][ch] } }));
+  }
+
+  const inputCls = "rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-2.5 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] transition-colors";
+
+  return (
+    <div className="max-w-2xl space-y-8">
+
+      {/* ── Quiet Hours ── */}
+      <section>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Moon className="h-4 w-4 text-[var(--color-text-secondary)]" />
+              <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Quiet hours</h3>
+            </div>
+            <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Pause non-critical external notifications during rest hours. Critical security alerts will still come through.</p>
+          </div>
+          <Toggle on={quietHours} onChange={setQuietHours} />
+        </div>
+        {quietHours && (
+          <div className="flex items-center gap-3 pl-6">
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-8">From</span>
+              <input type="time" value={quietFrom} onChange={e => setQuietFrom(e.target.value)} className={inputCls} />
+            </div>
+            <Minus className="h-3 w-3 text-[var(--color-text-tertiary)]" />
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-4">To</span>
+              <input type="time" value={quietTo} onChange={e => setQuietTo(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="border-t border-[var(--color-border-1)]" />
+
+      {/* ── Alert Storm Protection ── */}
+      <section>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <ZapIcon className="h-4 w-4 text-[var(--color-text-secondary)]" />
+              <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Alert storm protection</h3>
+            </div>
+            <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Control notification volume and automatically group identical events to reduce noise during high-activity periods.</p>
+          </div>
+          <Toggle on={stormOn} onChange={setStormOn} />
+        </div>
+        {stormOn && (
+          <div className="pl-6 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-56">Group identical events after</span>
+              <input
+                type="number" min={1} max={100} value={stormThreshold}
+                onChange={e => setStormThreshold(Number(e.target.value))}
+                className={`${inputCls} w-16 text-center`}
+              />
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">occurrences</span>
+            </div>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">Notifications with the same title and source will be collapsed into a single grouped notification after the threshold is reached.</p>
+          </div>
+        )}
+      </section>
+
+      <div className="border-t border-[var(--color-border-1)]" />
+
+      {/* ── Channels by Topic ── */}
+      <section>
+        <div className="flex items-center gap-2 mb-1">
+          <Bell className="h-4 w-4 text-[var(--color-text-secondary)]" />
+          <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Notification channels by topic</h3>
+        </div>
+        <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] mb-5">Configure which channels receive notifications for each topic.</p>
+
+        {/* Channel header */}
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] overflow-hidden">
+          <div className="grid grid-cols-[1fr_80px_80px] bg-[var(--color-surface-secondary)] px-4 py-2.5 border-b border-[var(--color-border-1)]">
+            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Topic</span>
+            <div className="flex items-center justify-center gap-1.5">
+              <Smartphone className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
+              <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">In-App</span>
+            </div>
+            <div className="flex items-center justify-center gap-1.5">
+              <Mail className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
+              <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Email</span>
+            </div>
+          </div>
+
+          {TOPIC_GROUPS.map((grp, gi) => (
+            <div key={grp.group}>
+              {/* Group header */}
+              <div className="grid grid-cols-[1fr_80px_80px] px-4 py-2 bg-[var(--color-surface-tertiary)] border-b border-[var(--color-border-1)]">
+                <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-secondary)]">{grp.group}</span>
+              </div>
+              {/* Topic rows */}
+              {grp.items.map((item, ii) => (
+                <div key={item.id} className={`grid grid-cols-[1fr_80px_80px] px-4 py-3 items-center ${ii < grp.items.length - 1 || gi < TOPIC_GROUPS.length - 1 ? 'border-b border-[var(--color-border-1)]' : ''} hover:bg-[var(--color-surface-tertiary)] transition-colors`}>
+                  <span className="text-[var(--font-size-sm)] text-[var(--color-text-primary)] pl-2">{item.label}</span>
+                  <div className="flex justify-center">
+                    <ChannelCheckbox on={channels[item.id].inapp} onChange={() => toggleChannel(item.id, 'inapp')} />
+                  </div>
+                  <div className="flex justify-center">
+                    <ChannelCheckbox on={channels[item.id].email} onChange={() => toggleChannel(item.id, 'email')} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Save */}
+      <div className="flex justify-end pt-2 pb-8">
+        <Button variant="dark" size="md">Save changes</Button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-24">
+      <div className="rounded-full bg-[var(--color-surface-tertiary)] p-5">
+        <SettingsIcon className="h-7 w-7 text-[var(--color-text-tertiary)]" />
+      </div>
+      <p className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">{title}</p>
+      <p className="text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">This settings section is coming soon.</p>
+    </div>
+  );
+}
+
+function SettingsPage({ initialSection = 'notifications' }: { initialSection?: SettingsSection }) {
+  const [active, setActive] = useState<SettingsSection>(initialSection);
+  const [secOpen, setSecOpen] = useState(active.startsWith('security'));
+
+  function renderContent() {
+    switch (active) {
+      case 'notifications':  return <NotificationSettingsContent />;
+      case 'general':        return <SettingsPlaceholder title="General settings" />;
+      case 'members':        return <SettingsPlaceholder title="Members" />;
+      case 'groups':         return <SettingsPlaceholder title="Groups" />;
+      case 'security-sso':   return <SettingsPlaceholder title="Single Sign-On (SSO)" />;
+      case 'security-roles': return <SettingsPlaceholder title="Roles & permissions" />;
+      case 'security-advanced': return <SettingsPlaceholder title="Advanced security" />;
+      case 'security-ip':    return <SettingsPlaceholder title="Workspace IP allowlist" />;
+      case 'log-export':     return <SettingsPlaceholder title="Log export" />;
+      case 'cases':          return <SettingsPlaceholder title="Cases settings" />;
+      case 'socrates-tools': return <SettingsPlaceholder title="Socrates Tools" />;
+      default:               return null;
+    }
+  }
+
+  const sectionTitle = (() => {
+    if (active === 'notifications') return 'Notifications';
+    if (active.startsWith('security')) return 'Security';
+    return SETTINGS_NAV.find(n => n.id === active)?.label ?? '';
+  })();
+
+  return (
+    <div className="flex h-full bg-[var(--color-surface-primary)]">
+      {/* Settings left nav */}
+      <div className="w-52 shrink-0 border-r border-[var(--color-border-1)] bg-[var(--color-surface-secondary)] flex flex-col py-4 overflow-y-auto">
+        <p className="px-4 mb-3 text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Workspace settings</p>
+        {SETTINGS_NAV.map(nav => {
+          const Icon = nav.icon;
+          const isSecGrp = nav.id === 'security-sso';
+          const isActive = nav.sub ? nav.sub.some(s => s.id === active) : active === nav.id;
+          return (
+            <div key={nav.id}>
+              <button
+                onClick={() => {
+                  if (isSecGrp) { setSecOpen(o => !o); if (!secOpen) setActive('security-sso'); }
+                  else setActive(nav.id as SettingsSection);
+                }}
+                className={`w-full flex items-center gap-2.5 px-4 py-2 text-[var(--font-size-sm)] transition-colors ${isActive && !isSecGrp ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left">{nav.label}</span>
+                {isSecGrp && <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${secOpen ? 'rotate-180' : ''}`} />}
+              </button>
+              {isSecGrp && secOpen && nav.sub && (
+                <div className="pl-10">
+                  {nav.sub.map(sub => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setActive(sub.id)}
+                      className={`w-full flex items-center px-3 py-1.5 text-[var(--font-size-sm)] transition-colors rounded-[var(--radius-sm)] ${active === sub.id ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
+                    >
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Settings content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-10 pt-8">
+          <h2 className="text-[var(--font-size-2xl)] font-semibold text-[var(--color-text-primary)] mb-1">{sectionTitle}</h2>
+          <div className="border-b border-[var(--color-border-1)] mb-8" />
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Content Router ────────────────────────────────────────────────────────
 
 function ContentRouter({ pageId }: { pageId: string }) {
@@ -954,6 +1276,8 @@ function ContentRouter({ pageId }: { pageId: string }) {
     case 'interact-insights':      return <ComingSoonPage title="Insights"                icon={Lightbulb} />;
     case 'indicator-investigation':return <ComingSoonPage title="Indicator Investigation" icon={Target} />;
     case 'bring-data':             return <ComingSoonPage title="Bring Me the Data"       icon={Database} />;
+    case 'settings-notifications': return <SettingsPage initialSection="notifications" />;
+    case 'settings':               return <SettingsPage initialSection="general" />;
     default:                       return null;
   }
 }
