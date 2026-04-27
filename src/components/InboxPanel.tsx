@@ -1193,7 +1193,7 @@ function MoreMenu({
   onArchiveRead,
   onViewArchive,
   onClose,
-  onNavigate,
+  onOpenSettings,
   anchorEl,
 }: {
   onMarkAllRead: () => void;
@@ -1201,7 +1201,7 @@ function MoreMenu({
   onArchiveRead: () => void;
   onViewArchive: () => void;
   onClose: () => void;
-  onNavigate: (pageId: string) => void;
+  onOpenSettings?: () => void;
   anchorEl: HTMLElement | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1250,7 +1250,7 @@ function MoreMenu({
         View archive
       </button>
       <div className="my-1 border-t border-[var(--color-border-1)]" />
-      <button onClick={() => { onNavigate('settings-notifications'); onClose(); }} className={btnClass}>
+      <button onClick={() => { onClose(); onOpenSettings?.(); }} className={btnClass}>
         <Settings2 className="h-3.5 w-3.5 shrink-0" />
         Notifications settings
       </button>
@@ -1265,9 +1265,10 @@ export interface InboxPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (pageId: string) => void;
+  onOpenSettings?: () => void;
 }
 
-export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
+export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: InboxPanelProps) {
   const [view, setView] = useState<View>('all');
   const [prevView, setPrevView] = useState<'all' | 'unread'>('all');
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
@@ -1532,7 +1533,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                   <MoreMenu anchorEl={moreBtnRef.current} onMarkAllRead={handleMarkAllRead}
                     onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
                     onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
-                    onNavigate={onNavigate}
+                    onOpenSettings={onOpenSettings}
                   />
                 )}
               </AnimatePresence>
@@ -1716,7 +1717,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate }: InboxPanelProps) {
                         <MoreMenu anchorEl={archiveMoreBtnRef.current} onMarkAllRead={handleMarkAllRead}
                           onArchiveAll={handleArchiveAll} onArchiveRead={handleArchiveRead}
                           onViewArchive={goToArchive} onClose={() => setMoreOpen(false)}
-                          onNavigate={onNavigate}
+                          onOpenSettings={onOpenSettings}
                         />
                       )}
                     </AnimatePresence>

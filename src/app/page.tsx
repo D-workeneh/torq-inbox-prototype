@@ -1551,14 +1551,8 @@ export default function Home() {
             <InboxPanel
               isOpen={inboxOpen}
               onClose={() => setInboxOpen(false)}
-              onNavigate={(pageId) => {
-                if (pageId === 'settings-notifications') {
-                  setSettingsSection('notifications');
-                  setSettingsOpen(true);
-                } else {
-                  setCurrentPage(pageId);
-                }
-              }}
+              onNavigate={(pageId) => setCurrentPage(pageId)}
+              onOpenSettings={() => { setSettingsSection('notifications'); setSettingsOpen(true); }}
             />
           </div>
         </motion.div>
