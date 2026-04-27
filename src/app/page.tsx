@@ -50,21 +50,15 @@ import {
   Bell,
   Users,
   UserCog,
-  Lock,
-  KeyRound,
   ShieldCheck,
-  NetworkIcon,
   Download,
   Briefcase,
   Cpu,
   Mail,
   Smartphone,
   Moon,
-  Zap as ZapIcon,
-  ChevronDown as ChevronDownIcon,
-  ToggleLeft,
-  ToggleRight,
   Minus,
+  X as XIcon,
 } from 'lucide-react';
 import { InboxPanel } from '@/components/InboxPanel';
 
@@ -1069,12 +1063,12 @@ function NotificationSettingsContent() {
           <div className="flex items-center gap-3 pl-6">
             <div className="flex items-center gap-2">
               <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-8">From</span>
-              <input type="time" value={quietFrom} onChange={e => setQuietFrom(e.target.value)} className={inputCls} />
+              <input type="time" value={quietFrom} onChange={e => setQuietFrom(e.target.value)} className={inputCls} suppressHydrationWarning />
             </div>
             <Minus className="h-3 w-3 text-[var(--color-text-tertiary)]" />
             <div className="flex items-center gap-2">
               <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-4">To</span>
-              <input type="time" value={quietTo} onChange={e => setQuietTo(e.target.value)} className={inputCls} />
+              <input type="time" value={quietTo} onChange={e => setQuietTo(e.target.value)} className={inputCls} suppressHydrationWarning />
             </div>
           </div>
         )}
@@ -1087,7 +1081,7 @@ function NotificationSettingsContent() {
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <ZapIcon className="h-4 w-4 text-[var(--color-text-secondary)]" />
+              <Zap className="h-4 w-4 text-[var(--color-text-secondary)]" />
               <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Alert storm protection</h3>
             </div>
             <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Control notification volume and automatically group identical events to reduce noise during high-activity periods.</p>
@@ -1177,9 +1171,13 @@ function SettingsPlaceholder({ title }: { title: string }) {
   );
 }
 
-function SettingsPage({ initialSection = 'notifications' }: { initialSection?: SettingsSection }) {
+function SettingsPage({ initialSection = 'notifications', onSectionChange }: { initialSection?: SettingsSection; onSectionChange?: (s: SettingsSection) => void }) {
   const [active, setActive] = useState<SettingsSection>(initialSection);
   const [secOpen, setSecOpen] = useState(active.startsWith('security'));
+
+  useEffect(() => { setActive(initialSection); }, [initialSection]);
+
+  function goTo(s: SettingsSection) { setActive(s); onSectionChange?.(s); }
 
   function renderContent() {
     switch (active) {
@@ -1217,8 +1215,8 @@ function SettingsPage({ initialSection = 'notifications' }: { initialSection?: S
             <div key={nav.id}>
               <button
                 onClick={() => {
-                  if (isSecGrp) { setSecOpen(o => !o); if (!secOpen) setActive('security-sso'); }
-                  else setActive(nav.id as SettingsSection);
+                  if (isSecGrp) { setSecOpen(o => !o); if (!secOpen) goTo('security-sso'); }
+                  else goTo(nav.id as SettingsSection);
                 }}
                 className={`w-full flex items-center gap-2.5 px-4 py-2 text-[var(--font-size-sm)] transition-colors ${isActive && !isSecGrp ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
               >
@@ -1231,7 +1229,7 @@ function SettingsPage({ initialSection = 'notifications' }: { initialSection?: S
                   {nav.sub.map(sub => (
                     <button
                       key={sub.id}
-                      onClick={() => setActive(sub.id)}
+                      onClick={() => goTo(sub.id)}
                       className={`w-full flex items-center px-3 py-1.5 text-[var(--font-size-sm)] transition-colors rounded-[var(--radius-sm)] ${active === sub.id ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'}`}
                     >
                       {sub.label}
@@ -1293,6 +1291,8 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState('workflows');
   const [searchVal, setSearchVal] = useState('');
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('notifications');
   const workspaceBtnRef = useRef<HTMLButtonElement>(null);
 
   function navigate(pageId: string) {
@@ -1546,7 +1546,18 @@ export default function Home() {
           className="absolute top-0 h-full z-50 flex pointer-events-none"
         >
           <div className="pointer-events-auto h-full flex">
-            <InboxPanel isOpen={inboxOpen} onClose={() => setInboxOpen(false)} onNavigate={setCurrentPage} />
+            <InboxPanel
+              isOpen={inboxOpen}
+              onClose={() => setInboxOpen(false)}
+              onNavigate={(pageId) => {
+                if (pageId === 'settings-notifications') {
+                  setSettingsSection('notifications');
+                  setSettingsOpen(true);
+                } else {
+                  setCurrentPage(pageId);
+                }
+              }}
+            />
           </div>
         </motion.div>
 
@@ -1644,6 +1655,47 @@ export default function Home() {
           </>}
         </main>
       </div>
+
+      {/* ── Settings Modal ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {settingsOpen && createPortal(
+          <motion.div
+            key="settings-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setSettingsOpen(false)}
+          >
+            <motion.div
+              key="settings-dialog"
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative bg-[var(--color-surface-primary)] rounded-[var(--radius-xl)] shadow-2xl overflow-hidden flex"
+              style={{ width: '88vw', maxWidth: 960, height: '82vh' }}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+
+              <SettingsPage
+                initialSection={settingsSection}
+                onSectionChange={setSettingsSection}
+              />
+            </motion.div>
+          </motion.div>,
+          document.body,
+        )}
+      </AnimatePresence>
     </div>
   );
 }
