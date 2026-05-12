@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
+import { Toggle } from '@/components/ui/Toggle';
+import { Checkbox, CheckboxButton } from '@/components/ui/Checkbox';
 import {
   Workflow,
   Search as SearchLucide,
@@ -59,6 +61,7 @@ import {
   Moon,
   Minus,
   X as XIcon,
+  UserPlus,
 } from 'lucide-react';
 import { InboxPanel } from '@/components/InboxPanel';
 
@@ -966,207 +969,903 @@ const SETTINGS_NAV: { id: SettingsSection; label: string; icon: React.ElementTyp
   { id: 'notifications',  label: 'Notifications',  icon: Bell },
 ];
 
-// ── Notification Settings ──────────────────────────────────────────────────
+// ── Notification Settings (MVP — matches notification-center Figma) ───────
 
 type ChannelKey = 'inapp' | 'email';
-type TopicKey = 'system-updates' | 'system-billing' | 'system-security' | 'socrates-approval' | 'socrates-task' | 'socrates-confidence' | 'mentions-case' | 'mentions-comment' | 'workflows-failures' | 'workflows-completions' | 'workflows-runner' | 'cases-assignments' | 'cases-sla' | 'cases-status';
 
-type ChannelState = Record<TopicKey, Record<ChannelKey, boolean>>;
+/** Leaf notification topic ids grouped under expandable categories */
+type NotifTopicId =
+  | 'plat-maintenance'
+  | 'plat-product'
+  | 'soc-queue'
+  | 'soc-escalation'
+  | 'auto-failed'
+  | 'auto-runner'
+  | 'auto-template'
+  | 'auto-success'
+  | 'soc-ai-approval'
+  | 'soc-ai-task'
+  | 'soc-ai-confidence';
 
-const TOPIC_GROUPS = [
-  { group: 'System', items: [
-    { id: 'system-updates'    as TopicKey, label: 'Workspace updates' },
-    { id: 'system-billing'    as TopicKey, label: 'Billing alerts' },
-    { id: 'system-security'   as TopicKey, label: 'Security alerts' },
-  ]},
-  { group: 'Socrates AI', items: [
-    { id: 'socrates-approval'   as TopicKey, label: 'Approval requests' },
-    { id: 'socrates-task'       as TopicKey, label: 'Task completions' },
-    { id: 'socrates-confidence' as TopicKey, label: 'Confidence alerts' },
-  ]},
-  { group: 'Mentions', items: [
-    { id: 'mentions-case'    as TopicKey, label: 'Case mentions' },
-    { id: 'mentions-comment' as TopicKey, label: 'Comment mentions' },
-  ]},
-  { group: 'Workflows', items: [
-    { id: 'workflows-failures'    as TopicKey, label: 'Failures' },
-    { id: 'workflows-completions' as TopicKey, label: 'Completions' },
-    { id: 'workflows-runner'      as TopicKey, label: 'Runner health' },
-  ]},
-  { group: 'Cases', items: [
-    { id: 'cases-assignments' as TopicKey, label: 'Assignments' },
-    { id: 'cases-sla'         as TopicKey, label: 'SLA breaches' },
-    { id: 'cases-status'      as TopicKey, label: 'Status changes' },
-  ]},
+type NotifChannelState = Record<NotifTopicId, Record<ChannelKey, boolean>>;
+
+type NotifChannelItem = {
+  id: NotifTopicId;
+  label: string;
+  description?: string;
+  /** When true, channel is fixed (e.g. always on in-app only per policy) */
+  disableInApp?: boolean;
+  disableEmail?: boolean;
+};
+
+const NOTIFICATION_MVP_GROUPS: { id: string; label: string; items: NotifChannelItem[] }[] = [
+  {
+    id: 'platform',
+    label: 'Platform',
+    items: [
+      { id: 'plat-maintenance', label: 'Scheduled maintenance', description: 'Advance notice for planned downtime and upgrades.' },
+      { id: 'plat-product', label: 'Product announcements', description: 'New features and important product updates.' },
+    ],
+  },
+  {
+    id: 'hypersoc',
+    label: 'HyperSOC',
+    items: [
+      { id: 'soc-queue', label: 'Queue assignments', description: 'When a case or queue item is assigned to you.' },
+      { id: 'soc-escalation', label: 'Escalations', description: 'When an incident is escalated or severity changes.' },
+    ],
+  },
+  {
+    id: 'hyperautomation',
+    label: 'Hyperautomation',
+    items: [
+      { id: 'auto-failed', label: 'Failed executions', description: 'Workflow runs that failed to complete.', disableInApp: true, disableEmail: true },
+      { id: 'auto-runner', label: 'Runner health', description: 'Alerts when a runner goes offline or degrades.', disableInApp: true, disableEmail: true },
+      { id: 'auto-template', label: 'Template updates', description: 'When a shared template you use is updated.' },
+      { id: 'auto-success', label: 'Successful completions', description: 'When long-running workflows finish successfully.' },
+    ],
+  },
+  {
+    id: 'socrates',
+    label: 'Socrates AI',
+    items: [
+      { id: 'soc-ai-approval', label: 'Approval requests', description: 'When Socrates needs your sign-off on an action.' },
+      { id: 'soc-ai-task', label: 'Task completions', description: 'When an automated Socrates task finishes.' },
+      { id: 'soc-ai-confidence', label: 'Confidence alerts', description: 'When confidence drops below your threshold.' },
+    ],
+  },
 ];
 
-function buildDefaultChannels(): ChannelState {
-  const state: Partial<ChannelState> = {};
-  TOPIC_GROUPS.forEach(g => g.items.forEach(item => {
-    state[item.id] = { inapp: true, email: item.id.startsWith('system') || item.id === 'socrates-approval' || item.id === 'mentions-case' };
-  }));
-  return state as ChannelState;
-}
+const ALL_NOTIF_TOPIC_IDS: NotifTopicId[] = NOTIFICATION_MVP_GROUPS.flatMap((g) => g.items.map((i) => i.id));
 
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none ${on ? 'bg-[var(--color-neutral-800)]' : 'bg-[var(--color-neutral-200)]'}`}
-    >
-      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${on ? 'translate-x-4' : 'translate-x-0'}`} />
-    </button>
+function buildDefaultNotifChannels(): NotifChannelState {
+  const state = {} as Partial<NotifChannelState>;
+  NOTIFICATION_MVP_GROUPS.forEach((g) =>
+    g.items.forEach((item) => {
+      const emailOn = !item.disableEmail && (item.id.startsWith('plat') || item.id === 'soc-ai-approval' || item.id === 'soc-queue');
+      const inappOn = !item.disableInApp;
+      state[item.id] = { inapp: inappOn, email: emailOn };
+    }),
   );
-}
-
-function ChannelCheckbox({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`h-4 w-4 rounded-[3px] border transition-colors flex items-center justify-center shrink-0 ${on ? 'bg-[var(--color-neutral-800)] border-[var(--color-neutral-800)]' : 'bg-white border-[var(--color-border-3)]'}`}
-    >
-      {on && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
-    </button>
-  );
+  return state as NotifChannelState;
 }
 
 function NotificationSettingsContent() {
-  const [quietHours, setQuietHours]   = useState(true);
-  const [quietFrom, setQuietFrom]     = useState('22:00');
-  const [quietTo, setQuietTo]         = useState('08:00');
-  const [stormOn, setStormOn]         = useState(true);
-  const [stormThreshold, setStormThreshold] = useState(10);
-  const [channels, setChannels]       = useState<ChannelState>(buildDefaultChannels());
+  const THROTTLE_OPTIONS = ['5 min', '10 min', '15 min', '30 min', '60 min'] as const;
 
-  function toggleChannel(topic: TopicKey, ch: ChannelKey) {
-    setChannels(prev => ({ ...prev, [topic]: { ...prev[topic], [ch]: !prev[topic][ch] } }));
+  const [criticalBypass, setCriticalBypass] = useState(true);
+  const [throttleInterval, setThrottleInterval] = useState<(typeof THROTTLE_OPTIONS)[number]>('10 min');
+  const [channels, setChannels] = useState<NotifChannelState>(() => buildDefaultNotifChannels());
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    NOTIFICATION_MVP_GROUPS.forEach((g) => {
+      init[g.id] = false;
+    });
+    return init;
+  });
+
+  const selectCls =
+    'rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] min-w-[120px]';
+
+  function itemMeta(id: NotifTopicId) {
+    for (const g of NOTIFICATION_MVP_GROUPS) {
+      const it = g.items.find((x) => x.id === id);
+      if (it) return it;
+    }
+    return undefined;
   }
 
-  const inputCls = "rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-2.5 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] transition-colors";
+  function toggleChannel(topic: NotifTopicId, ch: ChannelKey) {
+    const meta = itemMeta(topic);
+    if (ch === 'inapp' && meta?.disableInApp) return;
+    if (ch === 'email' && meta?.disableEmail) return;
+    setChannels((prev) => ({ ...prev, [topic]: { ...prev[topic], [ch]: !prev[topic][ch] } }));
+  }
+
+  function toggleGroupExpanded(groupId: string) {
+    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  }
+
+  function leafStatesForChannel(ch: ChannelKey) {
+    return ALL_NOTIF_TOPIC_IDS.map((id) => {
+      const m = itemMeta(id);
+      if (ch === 'inapp' && m?.disableInApp) return null;
+      if (ch === 'email' && m?.disableEmail) return null;
+      return channels[id][ch];
+    }).filter((v): v is boolean => v !== null);
+  }
+
+  function allLeafOn(ch: ChannelKey) {
+    const s = leafStatesForChannel(ch);
+    return s.length > 0 && s.every(Boolean);
+  }
+
+  function someLeafOn(ch: ChannelKey) {
+    const s = leafStatesForChannel(ch);
+    return s.some(Boolean);
+  }
+
+  function setAllLeafChannel(ch: ChannelKey, value: boolean) {
+    setChannels((prev) => {
+      const next = { ...prev };
+      ALL_NOTIF_TOPIC_IDS.forEach((id) => {
+        const m = itemMeta(id);
+        if (ch === 'inapp' && m?.disableInApp) return;
+        if (ch === 'email' && m?.disableEmail) return;
+        next[id] = { ...next[id], [ch]: value };
+      });
+      return next;
+    });
+  }
+
+  function setGroupLeafChannel(groupId: string, ch: ChannelKey, value: boolean) {
+    const grp = NOTIFICATION_MVP_GROUPS.find((g) => g.id === groupId);
+    if (!grp) return;
+    setChannels((prev) => {
+      const next = { ...prev };
+      grp.items.forEach((item) => {
+        if (ch === 'inapp' && item.disableInApp) return;
+        if (ch === 'email' && item.disableEmail) return;
+        next[item.id] = { ...next[item.id], [ch]: value };
+      });
+      return next;
+    });
+  }
+
+  function groupLeafStates(groupId: string, ch: ChannelKey) {
+    const grp = NOTIFICATION_MVP_GROUPS.find((g) => g.id === groupId);
+    if (!grp) return [];
+    return grp.items
+      .map((item) => {
+        if (ch === 'inapp' && item.disableInApp) return null;
+        if (ch === 'email' && item.disableEmail) return null;
+        return channels[item.id][ch];
+      })
+      .filter((v): v is boolean => v !== null);
+  }
+
+  function groupAllOn(groupId: string, ch: ChannelKey) {
+    const s = groupLeafStates(groupId, ch);
+    if (s.length === 0) return false;
+    return s.every(Boolean);
+  }
+
+  function groupSomeOn(groupId: string, ch: ChannelKey) {
+    return groupLeafStates(groupId, ch).some(Boolean);
+  }
+
+  function restoreDefaults() {
+    setCriticalBypass(true);
+    setThrottleInterval('10 min');
+    setChannels(buildDefaultNotifChannels());
+  }
 
   return (
-    <div className="max-w-2xl space-y-8">
-
-      {/* ── Quiet Hours ── */}
+    <div className="space-y-8 w-full">
       <section>
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Moon className="h-4 w-4 text-[var(--color-text-secondary)]" />
-              <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Quiet hours</h3>
+        <p className="text-[var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-text-tertiary)] mb-2">
+          Noise control
+        </p>
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] divide-y divide-[var(--color-border-1)] overflow-hidden">
+          <div className="flex items-start justify-between gap-6 px-4 py-4">
+            <div className="min-w-0">
+              <p className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">Critical severity bypass</p>
+              <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] leading-relaxed">
+                Always deliver critical alerts in real-time, ignoring throttling and quiet hours.
+              </p>
             </div>
-            <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Pause non-critical external notifications during rest hours. Critical security alerts will still come through.</p>
+            <Toggle on={criticalBypass} onChange={setCriticalBypass} />
           </div>
-          <Toggle on={quietHours} onChange={setQuietHours} />
+          <div className="flex items-start justify-between gap-6 px-4 py-4">
+            <div className="min-w-0">
+              <p className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">Alert throttling</p>
+              <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] leading-relaxed">
+                Limit repeated notifications to once every {throttleInterval} across all channels.
+              </p>
+            </div>
+            <select
+              value={throttleInterval}
+              onChange={(e) => setThrottleInterval(e.target.value as (typeof THROTTLE_OPTIONS)[number])}
+              className={selectCls}
+              aria-label="Alert throttling interval"
+            >
+              {THROTTLE_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        {quietHours && (
-          <div className="flex items-center gap-3 pl-6">
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-8">From</span>
-              <input type="time" value={quietFrom} onChange={e => setQuietFrom(e.target.value)} className={inputCls} suppressHydrationWarning />
-            </div>
-            <Minus className="h-3 w-3 text-[var(--color-text-tertiary)]" />
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-4">To</span>
-              <input type="time" value={quietTo} onChange={e => setQuietTo(e.target.value)} className={inputCls} suppressHydrationWarning />
-            </div>
-          </div>
-        )}
       </section>
 
-      <div className="border-t border-[var(--color-border-1)]" />
-
-      {/* ── Alert Storm Protection ── */}
       <section>
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="h-4 w-4 text-[var(--color-text-secondary)]" />
-              <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Alert storm protection</h3>
-            </div>
-            <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Control notification volume and automatically group identical events to reduce noise during high-activity periods.</p>
-          </div>
-          <Toggle on={stormOn} onChange={setStormOn} />
+        <div className="mb-3">
+          <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Notification channels</h3>
+          <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
+            Choose how you want to be notified for workspace activity.
+          </p>
         </div>
-        {stormOn && (
-          <div className="pl-6 space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] w-56">Group identical events after</span>
-              <input
-                type="number" min={1} max={100} value={stormThreshold}
-                onChange={e => setStormThreshold(Number(e.target.value))}
-                className={`${inputCls} w-16 text-center`}
-              />
-              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">occurrences</span>
-            </div>
-            <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">Notifications with the same title and source will be collapsed into a single grouped notification after the threshold is reached.</p>
-          </div>
-        )}
-      </section>
 
-      <div className="border-t border-[var(--color-border-1)]" />
-
-      {/* ── Channels by Topic ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-1">
-          <Bell className="h-4 w-4 text-[var(--color-text-secondary)]" />
-          <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">Notification channels by topic</h3>
-        </div>
-        <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] mb-5">Configure which channels receive notifications for each topic.</p>
-
-        {/* Channel header */}
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] overflow-hidden">
-          <div className="grid grid-cols-[1fr_80px_80px] bg-[var(--color-surface-secondary)] px-4 py-2.5 border-b border-[var(--color-border-1)]">
-            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Topic</span>
-            <div className="flex items-center justify-center gap-1.5">
-              <Smartphone className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
+          <div className="grid grid-cols-[minmax(0,1fr)_88px_88px] sm:grid-cols-[minmax(0,1fr)_100px_100px] bg-[var(--color-surface-secondary)] px-4 py-2.5 border-b border-[var(--color-border-1)] items-center">
+            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)]">Notify me about</span>
+            <div className="flex flex-col items-center justify-center gap-0.5">
               <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">In-App</span>
+              <label className="inline-flex cursor-pointer items-center justify-center p-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-primary)]/80">
+                <Checkbox
+                  checked={allLeafOn('inapp')}
+                  indeterminate={!allLeafOn('inapp') && someLeafOn('inapp')}
+                  onChange={() => setAllLeafChannel('inapp', !allLeafOn('inapp'))}
+                  size="sm"
+                  aria-label="Select all in-app notifications"
+                />
+              </label>
             </div>
-            <div className="flex items-center justify-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
+            <div className="flex flex-col items-center justify-center gap-0.5">
               <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Email</span>
+              <label className="inline-flex cursor-pointer items-center justify-center p-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-primary)]/80">
+                <Checkbox
+                  checked={allLeafOn('email')}
+                  indeterminate={!allLeafOn('email') && someLeafOn('email')}
+                  onChange={() => setAllLeafChannel('email', !allLeafOn('email'))}
+                  size="sm"
+                  aria-label="Select all email notifications"
+                />
+              </label>
             </div>
           </div>
 
-          {TOPIC_GROUPS.map((grp, gi) => (
-            <div key={grp.group}>
-              {/* Group header */}
-              <div className="grid grid-cols-[1fr_80px_80px] px-4 py-2 bg-[var(--color-surface-tertiary)] border-b border-[var(--color-border-1)]">
-                <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-secondary)]">{grp.group}</span>
-              </div>
-              {/* Topic rows */}
-              {grp.items.map((item, ii) => (
-                <div key={item.id} className={`grid grid-cols-[1fr_80px_80px] px-4 py-3 items-center ${ii < grp.items.length - 1 || gi < TOPIC_GROUPS.length - 1 ? 'border-b border-[var(--color-border-1)]' : ''} hover:bg-[var(--color-surface-tertiary)] transition-colors`}>
-                  <span className="text-[var(--font-size-sm)] text-[var(--color-text-primary)] pl-2">{item.label}</span>
+          {NOTIFICATION_MVP_GROUPS.map((grp, gi) => {
+            const open = expandedGroups[grp.id];
+            const isLastGroup = gi === NOTIFICATION_MVP_GROUPS.length - 1;
+            return (
+              <div key={grp.id}>
+                <div
+                  className={`grid grid-cols-[minmax(0,1fr)_88px_88px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center px-2 sm:px-3 py-2.5 bg-[var(--color-surface-tertiary)] border-b border-[var(--color-border-1)] ${
+                    !open && isLastGroup ? '' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleGroupExpanded(grp.id)}
+                    className="flex items-center gap-2 min-w-0 text-left py-1 pl-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-primary)]/60 transition-colors"
+                  >
+                    <ChevronRight className={`h-4 w-4 shrink-0 text-[var(--color-text-tertiary)] transition-transform ${open ? 'rotate-90' : ''}`} />
+                    <span className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">{grp.label}</span>
+                  </button>
                   <div className="flex justify-center">
-                    <ChannelCheckbox on={channels[item.id].inapp} onChange={() => toggleChannel(item.id, 'inapp')} />
+                    <label className="inline-flex cursor-pointer items-center justify-center p-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-primary)]/60">
+                      <Checkbox
+                        checked={groupAllOn(grp.id, 'inapp')}
+                        indeterminate={!groupAllOn(grp.id, 'inapp') && groupSomeOn(grp.id, 'inapp')}
+                        onChange={() => setGroupLeafChannel(grp.id, 'inapp', !groupAllOn(grp.id, 'inapp'))}
+                        size="sm"
+                        aria-label={`${grp.label} — toggle all in-app`}
+                      />
+                    </label>
                   </div>
                   <div className="flex justify-center">
-                    <ChannelCheckbox on={channels[item.id].email} onChange={() => toggleChannel(item.id, 'email')} />
+                    <label className="inline-flex cursor-pointer items-center justify-center p-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-primary)]/60">
+                      <Checkbox
+                        checked={groupAllOn(grp.id, 'email')}
+                        indeterminate={!groupAllOn(grp.id, 'email') && groupSomeOn(grp.id, 'email')}
+                        onChange={() => setGroupLeafChannel(grp.id, 'email', !groupAllOn(grp.id, 'email'))}
+                        size="sm"
+                        aria-label={`${grp.label} — toggle all email`}
+                      />
+                    </label>
                   </div>
                 </div>
-              ))}
-            </div>
-          ))}
+
+                <AnimatePresence initial={false}>
+                  {open && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      {grp.items.map((item, ii) => (
+                        <div
+                          key={item.id}
+                          className={`grid grid-cols-[minmax(0,1fr)_88px_88px] sm:grid-cols-[minmax(0,1fr)_100px_100px] px-4 py-3.5 items-start gap-y-1 border-b border-[var(--color-border-1)] last:border-b-0 hover:bg-[var(--color-surface-tertiary)]/50 transition-colors ${
+                            ii === grp.items.length - 1 && isLastGroup ? 'border-b-0' : ''
+                          }`}
+                        >
+                          <div className="min-w-0 pl-7">
+                            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">{item.label}</p>
+                            {item.description && (
+                              <p className="mt-0.5 text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] leading-relaxed">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex justify-center pt-0.5">
+                            <CheckboxButton
+                              checked={channels[item.id].inapp}
+                              disabled={item.disableInApp}
+                              onChange={() => toggleChannel(item.id, 'inapp')}
+                              aria-label={`${item.label} — in-app`}
+                            />
+                          </div>
+                          <div className="flex justify-center pt-0.5">
+                            <CheckboxButton
+                              checked={channels[item.id].email}
+                              disabled={item.disableEmail}
+                              onChange={() => toggleChannel(item.id, 'email')}
+                              aria-label={`${item.label} — email`}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <Button variant="ghost" size="sm" onClick={restoreDefaults}>
+            Restore to default
+          </Button>
         </div>
       </section>
 
-      {/* Save */}
-      <div className="flex justify-end pt-2 pb-8">
+      <div className="flex justify-end pt-2 pb-4">
         <Button variant="dark" size="md">Save changes</Button>
       </div>
     </div>
   );
 }
 
-function SettingsPlaceholder({ title }: { title: string }) {
+// ── Shared primitives ──────────────────────────────────────────────────────
+
+function SettingsSection({ title, description, children, wide }: { title: string; description?: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-24">
-      <div className="rounded-full bg-[var(--color-surface-tertiary)] p-5">
-        <SettingsIcon className="h-7 w-7 text-[var(--color-text-tertiary)]" />
+    <section className="space-y-4 w-full">
+      <div className="max-w-3xl">
+        <h3 className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">{title}</h3>
+        {description && <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] mt-1 leading-relaxed">{description}</p>}
       </div>
-      <p className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">{title}</p>
-      <p className="text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">This settings section is coming soon.</p>
+      <div className="w-full">{children}</div>
+    </section>
+  );
+}
+
+function SettingsDivider() {
+  return <div className="border-t border-[var(--color-border-1)] my-7" />;
+}
+
+function SettingsInput({ label, value, hint, type = 'text' }: { label: string; value: string; hint?: string; type?: string }) {
+  const [val, setVal] = useState(value);
+  return (
+    <div className="space-y-1">
+      <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">{label}</label>
+      <input
+        type={type}
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] transition-colors"
+      />
+      {hint && <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">{hint}</p>}
+    </div>
+  );
+}
+
+function SettingsSelect({ label, value, options, hint }: { label: string; value: string; options: string[]; hint?: string }) {
+  const [val, setVal] = useState(value);
+  return (
+    <div className="space-y-1">
+      <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">{label}</label>
+      <select
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] transition-colors appearance-none"
+      >
+        {options.map(o => <option key={o}>{o}</option>)}
+      </select>
+      {hint && <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">{hint}</p>}
+    </div>
+  );
+}
+
+function SaveRow() {
+  return (
+    <div className="flex justify-end pt-4 pb-8">
+      <Button variant="dark" size="md">Save changes</Button>
+    </div>
+  );
+}
+
+// ── General ────────────────────────────────────────────────────────────────
+
+function GeneralSettingsContent() {
+  const [danger, setDanger] = useState(false);
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="Workspace identity" description="Manage your workspace name, slug and branding.">
+        <div className="space-y-4">
+          <SettingsInput label="Workspace name" value="Torq Dev" />
+          <SettingsInput label="Workspace slug" value="torq-dev" hint="Used in URLs and API references. Changing this will break existing links." />
+          <div className="space-y-1">
+            <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Workspace logo</label>
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-[var(--radius-md)] bg-[var(--color-neutral-900)] flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-lg">T</span>
+              </div>
+              <div>
+                <Button variant="secondary" size="sm">Upload logo</Button>
+                <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] mt-1">PNG, JPG or SVG. Max 512 KB.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection title="Localization" description="Set the default locale and time display preferences for all members.">
+        <div className="grid grid-cols-2 gap-4">
+          <SettingsSelect label="Timezone" value="(UTC+03:00) Jerusalem" options={['(UTC+00:00) UTC', '(UTC+03:00) Jerusalem', '(UTC-05:00) Eastern Time', '(UTC-08:00) Pacific Time', '(UTC+01:00) Amsterdam']} />
+          <SettingsSelect label="Date format" value="DD/MM/YYYY" options={['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD']} />
+          <SettingsSelect label="Language" value="English (US)" options={['English (US)', 'English (UK)', 'Hebrew', 'German', 'French']} />
+          <SettingsSelect label="First day of week" value="Sunday" options={['Sunday', 'Monday']} />
+        </div>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection title="Danger zone" description="Irreversible actions that affect your entire workspace.">
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-2)] divide-y divide-[var(--color-border-1)]">
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Transfer ownership</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Assign a new workspace owner. You will lose admin privileges.</p>
+            </div>
+            <Button variant="secondary" size="sm">Transfer</Button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-red-500)]">Delete workspace</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Permanently delete this workspace and all its data. Cannot be undone.</p>
+            </div>
+            <button
+              onClick={() => setDanger(true)}
+              className="shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-red-300)] px-3 py-1.5 text-[var(--font-size-sm)] text-[var(--color-red-500)] hover:bg-red-50 transition-colors"
+            >Delete workspace</button>
+          </div>
+        </div>
+        {danger && (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-red-300)] bg-red-50 px-4 py-3 text-[var(--font-size-sm)] text-[var(--color-red-500)] flex items-center justify-between">
+            <span>Type <strong>torq-dev</strong> to confirm deletion.</span>
+            <button onClick={() => setDanger(false)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"><XIcon className="h-4 w-4" /></button>
+          </div>
+        )}
+      </SettingsSection>
+
+      <SaveRow />
+    </div>
+  );
+}
+
+// ── Members ────────────────────────────────────────────────────────────────
+
+const MOCK_MEMBERS = [
+  { name: 'David Workeneh',   email: 'david@torq.io',    role: 'Owner',  last: '2 min ago',    avatar: 'D', color: '#083ABB' },
+  { name: 'Sarah Chen',       email: 'sarah@torq.io',    role: 'Admin',  last: '1 hour ago',   avatar: 'S', color: '#29CA88' },
+  { name: 'Marco Ricci',      email: 'marco@torq.io',    role: 'Member', last: '3 hours ago',  avatar: 'M', color: '#9275FF' },
+  { name: 'Aisha Okafor',     email: 'aisha@torq.io',    role: 'Member', last: 'Yesterday',    avatar: 'A', color: '#FF8E2E' },
+  { name: 'Lior Ben-David',   email: 'lior@torq.io',     role: 'Member', last: '2 days ago',   avatar: 'L', color: '#04C0FC' },
+  { name: 'Priya Nair',       email: 'priya@torq.io',    role: 'Viewer', last: '4 days ago',   avatar: 'P', color: '#FF7CAF' },
+  { name: 'James Okonkwo',    email: 'james@torq.io',    role: 'Viewer', last: '1 week ago',   avatar: 'J', color: '#FDD711' },
+];
+
+const ROLE_BADGE: Record<string, string> = {
+  Owner:  'bg-[var(--color-neutral-900)] text-white',
+  Admin:  'bg-[var(--color-primary-100)] text-[var(--color-primary-500)]',
+  Member: 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-secondary)]',
+  Viewer: 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-tertiary)]',
+};
+
+function MembersSettingsContent() {
+  const [search, setSearch] = useState('');
+  const filtered = MOCK_MEMBERS.filter(m =>
+    m.name.toLowerCase().includes(search.toLowerCase()) ||
+    m.email.toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <div className="space-y-4 w-full">
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--color-text-tertiary)]" />
+          <input
+            placeholder="Search members…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-8 pr-3 py-2 text-[var(--font-size-sm)] border border-[var(--color-border-2)] rounded-[var(--radius-sm)] outline-none focus:border-[var(--color-neutral-800)] transition-colors bg-[var(--color-surface-primary)]"
+          />
+        </div>
+        <Button variant="dark" size="sm" leftIcon={<UserPlus className="h-3.5 w-3.5" />}>Invite member</Button>
+      </div>
+
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] overflow-hidden">
+        <div className="grid grid-cols-[1fr_200px_120px_120px_40px] bg-[var(--color-surface-secondary)] px-4 py-2.5 border-b border-[var(--color-border-1)]">
+          {['Member', 'Email', 'Role', 'Last active', ''].map(h => (
+            <span key={h} className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">{h}</span>
+          ))}
+        </div>
+        {filtered.map((m, i) => (
+          <div key={m.email} className={`grid grid-cols-[1fr_200px_120px_120px_40px] px-4 py-3 items-center ${i < filtered.length - 1 ? 'border-b border-[var(--color-border-1)]' : ''} hover:bg-[var(--color-surface-tertiary)] transition-colors`}>
+            <div className="flex items-center gap-2.5">
+              <span className="h-7 w-7 rounded-full flex items-center justify-center text-[var(--font-size-xs)] font-bold text-white shrink-0" style={{ backgroundColor: m.color }}>{m.avatar}</span>
+              <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)] truncate">{m.name}</span>
+            </div>
+            <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] truncate">{m.email}</span>
+            <span className={`inline-flex w-fit items-center rounded-[var(--radius-sm)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium ${ROLE_BADGE[m.role]}`}>{m.role}</span>
+            <span className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">{m.last}</span>
+            <button className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">{MOCK_MEMBERS.length} members · 5 seats used of 20</p>
+    </div>
+  );
+}
+
+// ── Groups ─────────────────────────────────────────────────────────────────
+
+const MOCK_GROUPS = [
+  { name: 'SOC Team',       members: 12, desc: 'Tier-1 and Tier-2 analysts with case access.',    color: '#2864FF' },
+  { name: 'IR Response',    members: 5,  desc: 'Incident responders with full workflow rights.',   color: '#EA231A' },
+  { name: 'Threat Intel',   members: 8,  desc: 'Read-only access to cases and Socrates outputs.', color: '#9275FF' },
+  { name: 'DevOps',         members: 3,  desc: 'Manages runners, integrations and API keys.',     color: '#29CA88' },
+  { name: 'Compliance',     members: 4,  desc: 'View-only audit and log export access.',          color: '#FDD711' },
+];
+
+function GroupsSettingsContent() {
+  return (
+    <div className="space-y-4 w-full">
+      <div className="flex items-center justify-between">
+        <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">{MOCK_GROUPS.length} groups</p>
+        <Button variant="dark" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />}>New group</Button>
+      </div>
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] divide-y divide-[var(--color-border-1)] overflow-hidden">
+        {MOCK_GROUPS.map(g => (
+          <div key={g.name} className="flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--color-surface-tertiary)] transition-colors">
+            <div className="h-8 w-8 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0" style={{ backgroundColor: g.color + '22' }}>
+              <Users className="h-4 w-4" style={{ color: g.color }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">{g.name}</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)] truncate">{g.desc}</p>
+            </div>
+            <span className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] shrink-0">{g.members} members</span>
+            <button className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors shrink-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Security ───────────────────────────────────────────────────────────────
+
+function SecuritySSOContent() {
+  const [enabled, setEnabled] = useState(false);
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="Single Sign-On (SSO)" description="Let members log in with your company's identity provider via SAML 2.0 or OIDC.">
+        <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)] mb-5">
+          <div>
+            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Enable SSO</p>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Members will be redirected to your IdP on login.</p>
+          </div>
+          <Toggle on={enabled} onChange={setEnabled} />
+        </div>
+        <div className={`space-y-4 ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <SettingsSelect label="Protocol" value="SAML 2.0" options={['SAML 2.0', 'OIDC']} />
+          <SettingsInput label="IdP Entity ID / Issuer" value="" hint="Provided by your identity provider." />
+          <SettingsInput label="IdP SSO URL" value="" hint="The endpoint that receives SAML/OIDC auth requests." />
+          <div className="space-y-1">
+            <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">IdP certificate (X.509)</label>
+            <textarea
+              rows={4}
+              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+              className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-3 py-2 text-[var(--font-size-xs)] font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] resize-none transition-colors"
+            />
+          </div>
+          <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--color-surface-secondary)] border border-[var(--color-border-1)]">
+            <p className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)] mb-1">Your ACS (callback) URL</p>
+            <code className="text-[var(--font-size-xs)] text-[var(--color-primary-500)]">https://app.torq.io/auth/saml/torq-dev/callback</code>
+          </div>
+        </div>
+      </SettingsSection>
+      <SaveRow />
+    </div>
+  );
+}
+
+function SecurityRolesContent() {
+  const roles = [
+    { name: 'Owner',  desc: 'Full access. Can delete workspace and manage billing.',        count: 1 },
+    { name: 'Admin',  desc: 'Manage members, roles, integrations and all workspace data.', count: 2 },
+    { name: 'Member', desc: 'Create and run workflows, view and edit cases.',               count: 4 },
+    { name: 'Viewer', desc: 'Read-only access to cases, workflows and dashboards.',         count: 2 },
+  ];
+  return (
+    <div className="space-y-4 w-full">
+      <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">Roles control what members can see and do across the workspace. Custom roles are available on Enterprise plans.</p>
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] divide-y divide-[var(--color-border-1)] overflow-hidden">
+        {roles.map(r => (
+          <div key={r.name} className="flex items-start gap-3 px-4 py-4 hover:bg-[var(--color-surface-tertiary)] transition-colors">
+            <span className={`mt-0.5 inline-flex items-center rounded-[var(--radius-sm)] px-2 py-0.5 text-[var(--font-size-xs)] font-medium shrink-0 ${ROLE_BADGE[r.name]}`}>{r.name}</span>
+            <div className="flex-1">
+              <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">{r.desc}</p>
+            </div>
+            <span className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)] shrink-0">{r.count} members</span>
+          </div>
+        ))}
+      </div>
+      <Button variant="secondary" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />}>Request custom role</Button>
+    </div>
+  );
+}
+
+function SecurityAdvancedContent() {
+  const [mfa, setMfa] = useState(true);
+  const [sessionTimeout, setSessionTimeout] = useState('8 hours');
+  const [apiExpiry, setApiExpiry] = useState(false);
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="Authentication" description="Enforce stronger login security for all workspace members.">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)]">
+            <div>
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Require MFA</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">All members must enable multi-factor authentication.</p>
+            </div>
+            <Toggle on={mfa} onChange={setMfa} />
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)]">
+            <div>
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Session timeout</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Automatically sign out inactive members.</p>
+            </div>
+            <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-2 py-1 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] bg-[var(--color-surface-primary)]">
+              {['1 hour', '4 hours', '8 hours', '24 hours', 'Never'].map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+      </SettingsSection>
+      <SettingsDivider />
+      <SettingsSection title="API keys" description="Control how API keys behave across the workspace.">
+        <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)]">
+          <div>
+            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Enforce key expiry</p>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">API keys expire after 90 days and must be rotated.</p>
+          </div>
+          <Toggle on={apiExpiry} onChange={setApiExpiry} />
+        </div>
+      </SettingsSection>
+      <SaveRow />
+    </div>
+  );
+}
+
+function SecurityIPContent() {
+  const [entries, setEntries] = useState(['10.100.0.0/16', '195.88.2.0/24']);
+  const [input, setInput] = useState('');
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="IP allowlist" description="Restrict workspace access to specific IP ranges. Members connecting from unlisted IPs will be blocked.">
+        <div className="space-y-2">
+          {entries.map(e => (
+            <div key={e} className="flex items-center justify-between px-3 py-2 rounded-[var(--radius-sm)] border border-[var(--color-border-1)] bg-[var(--color-surface-secondary)]">
+              <code className="text-[var(--font-size-sm)] text-[var(--color-text-primary)] font-mono">{e}</code>
+              <button onClick={() => setEntries(prev => prev.filter(x => x !== e))} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-red-500)] transition-colors">
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-2">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="e.g. 203.0.113.0/24"
+              className="flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border-2)] px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-neutral-800)] transition-colors bg-[var(--color-surface-primary)]"
+              onKeyDown={e => { if (e.key === 'Enter' && input.trim()) { setEntries(p => [...p, input.trim()]); setInput(''); }}}
+            />
+            <Button variant="secondary" size="sm" onClick={() => { if (input.trim()) { setEntries(p => [...p, input.trim()]); setInput(''); }}}>Add</Button>
+          </div>
+          <p className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">Press Enter or click Add. CIDR notation supported. Your current IP: 195.88.2.104</p>
+        </div>
+      </SettingsSection>
+      <SaveRow />
+    </div>
+  );
+}
+
+// ── Log Export ─────────────────────────────────────────────────────────────
+
+function LogExportContent() {
+  const [dest, setDest] = useState('S3');
+  const [enabled, setEnabled] = useState(true);
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="Log export" description="Stream audit logs and workflow execution logs to your SIEM or storage.">
+        <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)] mb-5">
+          <div>
+            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Enable log export</p>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Forward logs automatically to the configured destination.</p>
+          </div>
+          <Toggle on={enabled} onChange={setEnabled} />
+        </div>
+        <div className={`space-y-4 ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          <SettingsSelect label="Destination" value={dest} options={['S3', 'Google Cloud Storage', 'Azure Blob Storage', 'Splunk HEC', 'Elastic', 'Datadog']} hint="Select where logs should be forwarded." />
+          {dest === 'S3' && <>
+            <SettingsInput label="S3 bucket name" value="torq-logs-prod" />
+            <SettingsInput label="AWS region" value="us-east-1" />
+            <SettingsInput label="IAM role ARN" value="arn:aws:iam::123456789012:role/torq-log-export" hint="Torq will assume this role to write logs." />
+          </>}
+          {dest === 'Splunk HEC' && <>
+            <SettingsInput label="HEC endpoint URL" value="" />
+            <SettingsInput label="HEC token" value="" type="password" />
+          </>}
+          <SettingsSelect label="Log format" value="JSON (newline-delimited)" options={['JSON (newline-delimited)', 'JSON (array)', 'CEF']} />
+          <SettingsSelect label="Frequency" value="Every 15 minutes" options={['Real-time (streaming)', 'Every 5 minutes', 'Every 15 minutes', 'Hourly', 'Daily']} />
+        </div>
+      </SettingsSection>
+      <SaveRow />
+    </div>
+  );
+}
+
+// ── Cases ──────────────────────────────────────────────────────────────────
+
+function CasesSettingsContent() {
+  const [autoClose, setAutoClose] = useState(true);
+  const [slaWarn, setSlaWarn] = useState(true);
+  return (
+    <div className="space-y-0">
+      <SettingsSection title="Case defaults" description="Set default values applied when a new case is created.">
+        <div className="grid grid-cols-2 gap-4">
+          <SettingsSelect label="Default severity" value="Medium" options={['Critical', 'High', 'Medium', 'Low', 'Info']} />
+          <SettingsSelect label="Default assignee" value="Unassigned" options={['Unassigned', 'Case creator', 'SOC Team (round-robin)']} />
+          <SettingsSelect label="Default status" value="Open" options={['Open', 'In progress', 'Pending']} />
+          <SettingsSelect label="Case ID prefix" value="CASE-" options={['CASE-', 'INC-', 'TKT-', 'SOC-']} />
+        </div>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection title="SLA policy" description="Define response and resolution time targets by severity.">
+        <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] overflow-hidden mb-3">
+          <div className="grid grid-cols-[120px_1fr_1fr] bg-[var(--color-surface-secondary)] px-4 py-2 border-b border-[var(--color-border-1)]">
+            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Severity</span>
+            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">First response</span>
+            <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Resolution</span>
+          </div>
+          {[
+            { sev: 'Critical', fr: '15 min', res: '4 hours',  color: '#EA231A' },
+            { sev: 'High',     fr: '1 hour', res: '24 hours', color: '#FF8E2E' },
+            { sev: 'Medium',   fr: '4 hours',res: '3 days',   color: '#FDD711' },
+            { sev: 'Low',      fr: '1 day',  res: '7 days',   color: '#B0B3BD' },
+          ].map((row, i, arr) => (
+            <div key={row.sev} className={`grid grid-cols-[120px_1fr_1fr] px-4 py-3 items-center ${i < arr.length - 1 ? 'border-b border-[var(--color-border-1)]' : ''}`}>
+              <span className="inline-flex items-center gap-1.5 text-[var(--font-size-sm)]">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+                {row.sev}
+              </span>
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">{row.fr}</span>
+              <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">{row.res}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)]">
+          <div>
+            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">SLA breach warnings</p>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Send a notification 30 minutes before an SLA deadline.</p>
+          </div>
+          <Toggle on={slaWarn} onChange={setSlaWarn} />
+        </div>
+      </SettingsSection>
+
+      <SettingsDivider />
+
+      <SettingsSection title="Lifecycle">
+        <div className="flex items-center justify-between p-4 rounded-[var(--radius-md)] border border-[var(--color-border-2)]">
+          <div>
+            <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">Auto-close resolved cases</p>
+            <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">Cases in Resolved state for more than 7 days are automatically closed.</p>
+          </div>
+          <Toggle on={autoClose} onChange={setAutoClose} />
+        </div>
+      </SettingsSection>
+
+      <SaveRow />
+    </div>
+  );
+}
+
+// ── Socrates Tools ─────────────────────────────────────────────────────────
+
+function SocratesToolsContent() {
+  type ToolRow = { id: string; name: string; desc: string; risk: 'Low' | 'Medium' | 'High'; enabled: boolean };
+  const [tools, setTools] = useState<ToolRow[]>([
+    { id: 'enrich-ip',    name: 'IP enrichment',        desc: 'Query threat intel feeds for IP reputation.',          risk: 'Low',    enabled: true  },
+    { id: 'enrich-url',   name: 'URL enrichment',       desc: 'Detonate URLs in a sandboxed environment.',            risk: 'Medium', enabled: true  },
+    { id: 'enrich-file',  name: 'File hash lookup',     desc: 'Check hashes against VirusTotal and internal stores.', risk: 'Low',    enabled: true  },
+    { id: 'run-workflow', name: 'Trigger workflow',      desc: 'Autonomously trigger approved workflow templates.',    risk: 'High',   enabled: false },
+    { id: 'case-create',  name: 'Create case',          desc: 'Open a new case from an AI-identified incident.',      risk: 'Medium', enabled: true  },
+    { id: 'case-update',  name: 'Update case fields',   desc: 'Modify severity, status and assignee on cases.',       risk: 'Medium', enabled: false },
+    { id: 'web-search',   name: 'Web search',           desc: 'Search the web for threat context.',                   risk: 'Low',    enabled: true  },
+    { id: 'code-exec',    name: 'Code execution',       desc: 'Run Python snippets in a sandboxed environment.',      risk: 'High',   enabled: false },
+  ]);
+
+  const RISK_STYLE: Record<string, string> = {
+    Low:    'bg-[#e6f9f1] text-[#29CA88]',
+    Medium: 'bg-[#fff4e0] text-[#FF8E2E]',
+    High:   'bg-[#ffeaea] text-[#EA231A]',
+  };
+
+  function toggle(id: string) {
+    setTools(prev => prev.map(t => t.id === id ? { ...t, enabled: !t.enabled } : t));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-primary-50)] border border-[var(--color-primary-300)] flex gap-2.5">
+        <Cpu className="h-4 w-4 text-[var(--color-primary-500)] shrink-0 mt-0.5" />
+        <p className="text-[var(--font-size-sm)] text-[var(--color-primary-950)]">Socrates can only use tools that are explicitly enabled here. High-risk tools require an <strong>approval request</strong> before execution.</p>
+      </div>
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border-1)] overflow-hidden">
+        <div className="grid grid-cols-[1fr_70px_56px] bg-[var(--color-surface-secondary)] px-4 py-2.5 border-b border-[var(--color-border-1)]">
+          <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Tool</span>
+          <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide">Risk</span>
+          <span className="text-[var(--font-size-xs)] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wide text-center">On</span>
+        </div>
+        {tools.map((t, i) => (
+          <div key={t.id} className={`grid grid-cols-[1fr_70px_56px] px-4 py-3.5 items-center ${i < tools.length - 1 ? 'border-b border-[var(--color-border-1)]' : ''} hover:bg-[var(--color-surface-tertiary)] transition-colors`}>
+            <div>
+              <p className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">{t.name}</p>
+              <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">{t.desc}</p>
+            </div>
+            <span className={`inline-flex w-fit items-center rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[var(--font-size-xs)] font-medium ${RISK_STYLE[t.risk]}`}>{t.risk}</span>
+            <div className="flex justify-center">
+              <Toggle on={t.enabled} onChange={() => toggle(t.id)} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <SaveRow />
     </div>
   );
 }
@@ -1181,18 +1880,18 @@ function SettingsPage({ initialSection = 'notifications', onSectionChange }: { i
 
   function renderContent() {
     switch (active) {
-      case 'notifications':  return <NotificationSettingsContent />;
-      case 'general':        return <SettingsPlaceholder title="General settings" />;
-      case 'members':        return <SettingsPlaceholder title="Members" />;
-      case 'groups':         return <SettingsPlaceholder title="Groups" />;
-      case 'security-sso':   return <SettingsPlaceholder title="Single Sign-On (SSO)" />;
-      case 'security-roles': return <SettingsPlaceholder title="Roles & permissions" />;
-      case 'security-advanced': return <SettingsPlaceholder title="Advanced security" />;
-      case 'security-ip':    return <SettingsPlaceholder title="Workspace IP allowlist" />;
-      case 'log-export':     return <SettingsPlaceholder title="Log export" />;
-      case 'cases':          return <SettingsPlaceholder title="Cases settings" />;
-      case 'socrates-tools': return <SettingsPlaceholder title="Socrates Tools" />;
-      default:               return null;
+      case 'notifications':     return <NotificationSettingsContent />;
+      case 'general':           return <GeneralSettingsContent />;
+      case 'members':           return <MembersSettingsContent />;
+      case 'groups':            return <GroupsSettingsContent />;
+      case 'security-sso':      return <SecuritySSOContent />;
+      case 'security-roles':    return <SecurityRolesContent />;
+      case 'security-advanced': return <SecurityAdvancedContent />;
+      case 'security-ip':       return <SecurityIPContent />;
+      case 'log-export':        return <LogExportContent />;
+      case 'cases':             return <CasesSettingsContent />;
+      case 'socrates-tools':    return <SocratesToolsContent />;
+      default:                  return null;
     }
   }
 
@@ -1243,11 +1942,20 @@ function SettingsPage({ initialSection = 'notifications', onSectionChange }: { i
       </div>
 
       {/* Settings content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-10 pt-8">
-          <h2 className="text-[var(--font-size-2xl)] font-semibold text-[var(--color-text-primary)] mb-1">{sectionTitle}</h2>
-          <div className="border-b border-[var(--color-border-1)] mb-8" />
-          {renderContent()}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="px-10 pt-8 pb-12 w-full">
+          <div className="w-full">
+            <h2 className="text-[var(--font-size-2xl)] font-semibold text-[var(--color-text-primary)] mb-1">{sectionTitle}</h2>
+            {active === 'notifications' && (
+              <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)] mb-6 max-w-2xl">
+                Decide when and how you want to be notified.
+              </p>
+            )}
+            <div className={`border-b border-[var(--color-border-1)] ${active === 'notifications' ? 'mb-6' : 'mb-8'}`} />
+            <div className="w-full [&>*]:w-full">
+              {renderContent()}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1294,7 +2002,23 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('notifications');
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setSettingsOpen(false); }
+    function onOpenSettings(e: Event) {
+      const section = (e as CustomEvent<SettingsSection>).detail ?? 'notifications';
+      setSettingsSection(section);
+      setSettingsOpen(true);
+    }
+
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('torq:open-settings', onOpenSettings);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('torq:open-settings', onOpenSettings);
+    };
+  }, []);
   const workspaceBtnRef = useRef<HTMLButtonElement>(null);
 
   function navigate(pageId: string) {
@@ -1502,15 +2226,21 @@ export default function Home() {
             {/* Settings */}
             {sidebarCollapsed ? (
               <SidebarTooltip label="Settings">
-                <a href="#" onClick={(e) => e.stopPropagation()} className="flex items-center justify-center rounded-[var(--radius-md)] w-8 h-8 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'general' }))}
+                  className="flex items-center justify-center rounded-[var(--radius-md)] w-8 h-8 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
                   <SettingsIcon className="h-4 w-4" />
-                </a>
+                </button>
               </SidebarTooltip>
             ) : (
               <div className="px-2">
-                <a href="#" className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'general' }))}
+                  className="flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                >
                   <SettingsIcon className="h-3.5 w-3.5 shrink-0" />Settings
-                </a>
+                </button>
               </div>
             )}
 
@@ -1552,7 +2282,6 @@ export default function Home() {
               isOpen={inboxOpen}
               onClose={() => setInboxOpen(false)}
               onNavigate={(pageId) => setCurrentPage(pageId)}
-              onOpenSettings={() => { setSettingsSection('notifications'); setSettingsOpen(true); }}
             />
           </div>
         </motion.div>
@@ -1654,45 +2383,30 @@ export default function Home() {
       </div>
 
       {/* ── Settings Modal ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {mounted && settingsOpen && createPortal(
-          <motion.div
-            key="settings-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-            onClick={() => setSettingsOpen(false)}
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative bg-[var(--color-surface-primary)] rounded-[var(--radius-xl)] shadow-2xl overflow-hidden flex"
+            style={{ width: '90vw', maxWidth: 1300, height: '86vh' }}
           >
-            <motion.div
-              key="settings-dialog"
-              initial={{ opacity: 0, scale: 0.96, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-[var(--color-surface-primary)] rounded-[var(--radius-xl)] shadow-2xl overflow-hidden flex"
-              style={{ width: '88vw', maxWidth: 960, height: '82vh' }}
+            <button
+              onClick={() => setSettingsOpen(false)}
+              className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors"
             >
-              {/* Close button */}
-              <button
-                onClick={() => setSettingsOpen(false)}
-                className="absolute top-4 right-4 z-10 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-neutral-150)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-
-              <SettingsPage
-                initialSection={settingsSection}
-                onSectionChange={setSettingsSection}
-              />
-            </motion.div>
-          </motion.div>,
-          document.body,
-        )}
-      </AnimatePresence>
+              <XIcon className="h-4 w-4" />
+            </button>
+            <SettingsPage
+              initialSection={settingsSection}
+              onSectionChange={setSettingsSection}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

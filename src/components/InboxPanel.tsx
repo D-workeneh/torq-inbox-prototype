@@ -1250,7 +1250,13 @@ function MoreMenu({
         View archive
       </button>
       <div className="my-1 border-t border-[var(--color-border-1)]" />
-      <button onClick={() => { onClose(); onOpenSettings?.(); }} className={btnClass}>
+      <button
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'notifications' }));
+          onClose();
+        }}
+        className={btnClass}
+      >
         <Settings2 className="h-3.5 w-3.5 shrink-0" />
         Notifications settings
       </button>
