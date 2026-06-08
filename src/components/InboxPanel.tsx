@@ -35,8 +35,22 @@ import {
   FolderOpen,
   Bot,
   Loader2,
+  Shield,
+  Layers,
 } from 'lucide-react';
+import {
+  NOTIFICATION_MVP_GROUPS,
+  NOTIF_SETTINGS_SAVED_EVENT,
+  NOTIF_SETTINGS_STORAGE_KEY,
+  getInitialNotificationSettingsState,
+  pillarInAppDelivering,
+  saveQuickEnablePillar,
+  type NotifChannelState,
+  type NotifPillar,
+} from '@/lib/notificationSettingsStorage';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { FilterChip, AppliedFiltersBar } from '@/components/ui/FilterChip';
 import { Tag, SeverityTag } from '@/components/ui/Tag';
 import type { SeverityLevel } from '@/components/ui/Tag';
 import type { TagColor } from '@/components/ui/Tag';
@@ -45,13 +59,14 @@ import type { TagColor } from '@/components/ui/Tag';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 type NotifType = 'workflow-failed' | 'workflow-shared' | 'workspace-invite' | 'case-mention' | 'socrates-approval';
-type View = 'all' | 'unread' | 'archive';
+type View = 'all' | 'unread' | 'needs-action' | 'archive';
 interface Message {
   id: string;
   type: NotifType;
   source: string;          // Row 1: sender name (user, "Torq", "Socrates AI")
   subHeader: string;       // Row 2: action + context, e.g. "Invited you · Torq-dev"
   preview: string;         // Row 3: body text (grey, truncated 1 line)
+  groupedCount?: number;   // Repeated notifications grouped into this one by throttling
   severity: Severity;
   time: string;
   isRead: boolean;
@@ -69,44 +84,13 @@ interface Message {
 
 const SEVERITY_CONFIG: Record<Severity, {
   label: string;
-  color: string;
-  bg: string;
-  border: string;
-  dot: string;
+  iconClass: string;
   Icon: React.ElementType;
 }> = {
-  critical: {
-    label: 'Critical',
-    color: 'text-[var(--color-red-500)]',
-    bg: 'bg-[var(--color-red-50)]',
-    border: 'border-[var(--color-red-300)]',
-    dot: 'bg-[var(--color-red-500)]',
-    Icon: AlertOctagon,
-  },
-  high: {
-    label: 'High',
-    color: 'text-[var(--color-orange-500)]',
-    bg: 'bg-[var(--color-orange-100)]',
-    border: 'border-[var(--color-orange-300)]',
-    dot: 'bg-[var(--color-orange-500)]',
-    Icon: AlertTriangle,
-  },
-  medium: {
-    label: 'Medium',
-    color: 'text-[var(--color-yellow-500)]',
-    bg: 'bg-[var(--color-yellow-100)]',
-    border: 'border-[var(--color-yellow-200)]',
-    dot: 'bg-[var(--color-yellow-500)]',
-    Icon: AlertCircle,
-  },
-  low: {
-    label: 'Low',
-    color: 'text-[var(--color-cyan-500)]',
-    bg: 'bg-[var(--color-cyan-100)]',
-    border: 'border-[var(--color-cyan-300)]',
-    dot: 'bg-[var(--color-cyan-500)]',
-    Icon: Info,
-  },
+  critical: { label: 'Critical', iconClass: 'text-[var(--viz-critical)]', Icon: AlertOctagon },
+  high: { label: 'High', iconClass: 'text-[var(--viz-high)]', Icon: AlertTriangle },
+  medium: { label: 'Medium', iconClass: 'text-[var(--viz-medium)]', Icon: AlertCircle },
+  low: { label: 'Low', iconClass: 'text-[var(--viz-neutral)]', Icon: Info },
 };
 
 const TYPE_CONFIG: Record<NotifType, { label: string; Icon: React.ElementType; color: string; tagColor: TagColor }> = {
@@ -117,12 +101,30 @@ const TYPE_CONFIG: Record<NotifType, { label: string; Icon: React.ElementType; c
   'socrates-approval':  { label: 'Approval request', Icon: ThumbsUp, color: '#7C5CFC', tagColor: 'purple'  },
 };
 
+function messagePillar(m: Message): NotifPillar {
+  switch (m.type) {
+    case 'workflow-failed':
+    case 'workflow-shared':
+      return 'hyperautomation';
+    case 'workspace-invite':
+      return 'platform';
+    case 'case-mention':
+      return 'hypersoc';
+    case 'socrates-approval':
+      return 'socrates';
+  }
+}
+
+function messageNeedsAction(m: Message): boolean {
+  return m.approvalState === 'pending' || m.inviteState === 'pending';
+}
+
 type WSItem = { id: string; name: string; isCurrent?: boolean };
 const WORKSPACES: WSItem[] = [
-  { id: 'torq-dev',     name: 'Torq - dev',     isCurrent: true },
-  { id: 'torq-staging', name: 'Torq - staging' },
-  { id: 'torq-prod',    name: 'Torq - prod' },
-  { id: 'acme-corp',    name: 'Acme Corp' },
+  { id: 'torq-dev', name: 'torq-dev', isCurrent: true },
+  { id: 'torq-staging', name: 'Genesis-Dev-58' },
+  { id: 'torq-prod', name: 'Pinnacle-Prod' },
+  { id: 'acme-corp', name: 'acme-corp' },
 ];
 
 const INITIAL_MESSAGES: Message[] = [
@@ -158,7 +160,7 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-3',
     type: 'workspace-invite',
     source: 'Lihi Nachman',
-    subHeader: 'Invited you · Torq - dev',
+    subHeader: 'Invited you · torq-dev',
     preview: 'Lihi Nachman has invited you to collaborate with them in Torq, the no-code security automation platform for organizations.',
     severity: 'low',
     time: '15m ago',
@@ -171,8 +173,9 @@ const INITIAL_MESSAGES: Message[] = [
     id: 'msg-4',
     type: 'workflow-failed',
     source: 'Torq',
-    subHeader: 'Workflow failed · Auto-Triage v2',
-    preview: 'Failed at step 7 — Jira ticket creation. Error: API rate limit exceeded. 6 alerts were left unprocessed and require manual review.',
+    subHeader: 'Grouped workflow failures · Auto-Triage v2',
+    preview: '6 workflow failure alerts from the last 10 min were grouped into one notification. Open to review all affected runs and the latest error details.',
+    groupedCount: 6,
     severity: 'high',
     time: '22m ago',
     isRead: false,
@@ -281,7 +284,7 @@ function getTimeGroup(time: string): string {
 function TimeSectionHeader({ label }: { label: string }) {
   return (
     <div className="px-4 pt-4 pb-1.5">
-      <span className="text-[var(--font-size-xs)] font-medium select-none" style={{ color: 'var(--color-text-caption)' }}>
+      <span className="text-[length:var(--font-size-body2)] font-medium select-none text-[var(--text-tertiary)]">
         {label}
       </span>
     </div>
@@ -327,8 +330,8 @@ function NotifAvatar({ msg }: { msg: Message }) {
   const TypeIconEl = typeCfg.Icon;
 
   const badge = (
-    <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--color-surface-primary)] bg-white shadow-sm">
-      <TypeIconEl className="h-2.5 w-2.5 text-[var(--color-neutral-700)]" strokeWidth={2.5} />
+    <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[2px] border-[var(--surface)] bg-white shadow-sm">
+      <TypeIconEl className="h-2.5 w-2.5 text-[var(--neutral-9)]" strokeWidth={2.5} />
     </span>
   );
 
@@ -346,7 +349,7 @@ function NotifAvatar({ msg }: { msg: Message }) {
   if (isTorq) {
     return (
       <div className="relative shrink-0">
-        <div className="h-9 w-9 rounded-full flex items-center justify-center select-none bg-[var(--color-neutral-900)]">
+        <div className="h-9 w-9 rounded-full flex items-center justify-center select-none bg-[var(--neutral-12)]">
           <TorqLogoMark />
         </div>
         {badge}
@@ -408,11 +411,11 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
             pointerEvents: 'none',
           }}
         >
-          <div className="rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2 py-1 text-[var(--font-size-xs)] text-white whitespace-nowrap shadow-lg">
+          <div className="rounded-[var(--radius-sm)] bg-[var(--neutral-10)] px-2 py-1 text-[length:var(--font-size-body2)] text-white whitespace-nowrap shadow-lg">
             {label}
           </div>
           <div
-            className="bg-[var(--color-neutral-800)]"
+            className="bg-[var(--neutral-10)]"
             style={{ width: 6, height: 6, transform: 'rotate(45deg)', margin: '-3px auto 0' }}
           />
         </div>,
@@ -436,6 +439,11 @@ function EmptyState({ view }: { view: View }) {
       title: 'All caught up',
       body: 'No unread messages. You\'re up to date.',
     },
+    'needs-action': {
+      icon: AlertTriangle,
+      title: 'No actions pending',
+      body: 'Approvals and invites that need your response will appear here.',
+    },
     archive: {
       icon: ArchiveIcon,
       title: 'Archive is empty',
@@ -445,14 +453,14 @@ function EmptyState({ view }: { view: View }) {
   const Icon = config.icon;
   return (
     <div className="flex flex-col items-center justify-center flex-1 gap-3 py-16 px-8 text-center">
-      <div className="rounded-full bg-[var(--color-surface-tertiary)] p-5">
-        <Icon className="h-7 w-7 text-[var(--color-text-tertiary)]" />
+      <div className="rounded-full bg-[var(--bg-hover-level-2)] p-5">
+        <Icon className="h-7 w-7 text-[var(--text-tertiary)]" />
       </div>
       <div>
-        <p className="text-[var(--font-size-base)] font-semibold text-[var(--color-text-primary)]">
+        <p className="text-[length:var(--font-size-body1)] font-semibold text-[var(--text-primary)]">
           {config.title}
         </p>
-        <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">
+        <p className="mt-1 text-[length:var(--font-size-body1)] text-[var(--text-tertiary)]">
           {config.body}
         </p>
       </div>
@@ -488,10 +496,10 @@ function CountdownUndoButton({
         borderRadius: 'calc(var(--radius-sm) + 1.5px)',
         background: `conic-gradient(
           from -90deg,
-          var(--color-red-500) 0deg,
-          var(--color-red-500) ${deg}deg,
-          var(--color-border-2) ${deg}deg,
-          var(--color-border-2) 360deg
+          var(--ruby-10) 0deg,
+          var(--ruby-10) ${deg}deg,
+          var(--border-level-2) ${deg}deg,
+          var(--border-level-2) 360deg
         )`,
       }}
     >
@@ -499,10 +507,10 @@ function CountdownUndoButton({
         onClick={(e) => { e.stopPropagation(); if (enabled) onUndo(); }}
         disabled={!enabled}
         style={{ borderRadius: 'var(--radius-sm)' }}
-        className={`flex items-center gap-1.5 px-3 bg-[var(--color-surface-primary)] text-[var(--font-size-sm)] font-medium transition-colors select-none whitespace-nowrap ${
+        className={`flex items-center gap-1.5 px-3 bg-[var(--surface)] text-[length:var(--font-size-body1)] font-medium transition-colors select-none whitespace-nowrap ${
           enabled
-            ? 'text-[var(--color-red-500)] cursor-pointer hover:bg-[var(--color-red-50)]'
-            : 'text-[var(--color-text-disabled)] cursor-not-allowed'
+            ? 'text-[var(--ruby-10)] cursor-pointer hover:bg-[var(--ruby-1)]'
+            : 'text-[var(--text-disabled)] cursor-not-allowed'
         }`}
       >
         Undo
@@ -634,7 +642,7 @@ function MessageRow({
       onClick={handleRowClick}
       className={`relative flex items-start gap-3 px-4 py-3.5 transition-colors duration-150 ${
         hasTarget ? 'cursor-pointer' : 'cursor-default'
-      } ${hovered ? 'bg-[var(--color-surface-tertiary)]' : 'bg-[var(--color-surface-primary)]'}`}
+      } ${hovered ? 'bg-[var(--bg-hover-level-2)]' : 'bg-[var(--surface)]'}`}
     >
       {/* Avatar */}
       <NotifAvatar msg={msg} />
@@ -644,30 +652,39 @@ function MessageRow({
 
         {/* Row 1: sender name + timestamp + unread dot */}
         <div className="flex items-center justify-between gap-2 mb-0.5">
-          <p className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)] truncate leading-snug">
+          <p className="text-[length:var(--font-size-body1)] font-semibold text-[var(--text-primary)] truncate leading-snug">
             {msg.source}
           </p>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-350)] whitespace-nowrap">{msg.time}</span>
-            {!msg.isRead && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)] shrink-0" />}
+            <span className="text-[length:var(--font-size-body2)] text-[var(--neutral-6)] whitespace-nowrap">{msg.time}</span>
+            {!msg.isRead && <span className="h-1.5 w-1.5 rounded-full bg-[var(--switch-bg-on-idle)] shrink-0" aria-hidden />}
           </div>
         </div>
 
         {/* Row 2: action subheader */}
-        <p className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)] truncate leading-snug mb-1">
+        <p className="text-[length:var(--font-size-body2)] font-medium text-[var(--text-secondary)] truncate leading-snug mb-1">
           {msg.subHeader}
         </p>
 
         {/* Row 3: body preview — grey, single line */}
-        <p className="text-[var(--font-size-xs)] truncate leading-relaxed mb-2" style={{ color: 'var(--color-text-caption)' }}>
+        <p className="text-[length:var(--font-size-body2)] truncate leading-relaxed mb-2 text-[var(--text-tertiary)]">
           {msg.preview}
         </p>
 
+        {msg.groupedCount && msg.groupedCount > 1 && (
+          <div className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border-level-2)] bg-[var(--bg-static-2)] px-2 py-1">
+            <Layers className="h-3 w-3 shrink-0 text-[var(--text-secondary)]" strokeWidth={2} />
+            <span className="truncate text-[length:var(--font-size-body2)] font-medium text-[var(--text-secondary)]">
+              Contains {msg.groupedCount} grouped notifications
+            </span>
+          </div>
+        )}
+
         {/* ── Socrates: action chip ── */}
         {isSocrates && msg.approvalState === 'pending' && (
-          <div className="flex items-center gap-1.5 mb-2 rounded-[var(--radius-sm)] bg-[var(--color-purple-50)] border border-[var(--color-purple-200)] px-2.5 py-1.5 min-w-0 overflow-hidden">
-            <ThumbsUp className="h-3 w-3 text-[var(--color-purple-500)] shrink-0" />
-            <span className="text-[var(--font-size-xs)] text-[var(--color-purple-500)] font-medium truncate min-w-0">{msg.approvalAction}</span>
+          <div className="flex items-center gap-1.5 mb-2 rounded-[var(--radius-sm)] bg-[var(--lilac-1)] border border-[var(--lilac-1)] px-2.5 py-1.5 min-w-0 overflow-hidden">
+            <ThumbsUp className="h-3 w-3 text-[var(--lilac-10)] shrink-0" />
+            <span className="text-[length:var(--font-size-body2)] text-[var(--lilac-10)] font-medium truncate min-w-0">{msg.approvalAction}</span>
           </div>
         )}
 
@@ -676,10 +693,10 @@ function MessageRow({
           <div className="mt-1 mb-1" onClick={(e) => e.stopPropagation()}>
             {actionPhase === 'idle' && (
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => startCountdown('approved')}>
+                <Button theme="secondary" size="small" leftIcon={<Check />} onClick={() => startCountdown('approved')}>
                   Approve
                 </Button>
-                <Button variant="tertiary" size="sm" onClick={() => startCountdown('rejected')}>
+                <Button theme="third" size="small" onClick={() => startCountdown('rejected')}>
                   Reject
                 </Button>
               </div>
@@ -687,15 +704,15 @@ function MessageRow({
             {actionPhase === 'countdown' && (
               <div className="flex items-center gap-2">
                 <CountdownUndoButton progress={countdownProgress} enabled={undoBtnEnabled} onUndo={handleUndo} />
-                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>
+                <span className="text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]">
                   {pendingAction === 'approved' ? 'Approving…' : 'Rejecting…'}
                 </span>
               </div>
             )}
             {actionPhase === 'executing' && (
               <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-tertiary)]" />
-                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>Processing…</span>
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--text-tertiary)]" />
+                <span className="text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]">Processing…</span>
               </div>
             )}
           </div>
@@ -705,7 +722,7 @@ function MessageRow({
         {isSocrates && msg.approvalState && msg.approvalState !== 'pending' && (
           <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
-            <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
+            <span className="text-[length:var(--font-size-body2)] font-medium text-[var(--neutral-8)]">
               {msg.approvalState === 'approved' ? 'Action approved' : 'Action rejected'}
             </span>
           </div>
@@ -716,10 +733,10 @@ function MessageRow({
           <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
             {actionPhase === 'idle' && (
               <>
-                <Button variant="secondary" size="sm" leftIcon={<Check />} onClick={() => startCountdown('accepted')}>
+                <Button theme="secondary" size="small" leftIcon={<Check />} onClick={() => startCountdown('accepted')}>
                   Accept
                 </Button>
-                <Button variant="tertiary" size="sm" onClick={() => startCountdown('declined')}>
+                <Button theme="third" size="small" onClick={() => startCountdown('declined')}>
                   Decline
                 </Button>
               </>
@@ -727,15 +744,15 @@ function MessageRow({
             {actionPhase === 'countdown' && (
               <>
                 <CountdownUndoButton progress={countdownProgress} enabled={undoBtnEnabled} onUndo={handleUndo} />
-                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>
+                <span className="text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]">
                   {pendingAction === 'accepted' ? 'Accepting…' : 'Declining…'}
                 </span>
               </>
             )}
             {actionPhase === 'executing' && (
               <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-[var(--color-text-tertiary)]" />
-                <span className="text-[var(--font-size-xs)]" style={{ color: 'var(--color-text-caption)' }}>Processing…</span>
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--text-tertiary)]" />
+                <span className="text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]">Processing…</span>
               </div>
             )}
           </div>
@@ -745,7 +762,7 @@ function MessageRow({
         {isInvite && msg.inviteState && msg.inviteState !== 'pending' && (
           <div className="mb-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
             <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
-            <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-neutral-600)]">
+            <span className="text-[length:var(--font-size-body2)] font-medium text-[var(--neutral-8)]">
               {msg.inviteState === 'accepted' ? 'Invitation accepted' : 'Invitation declined'}
             </span>
           </div>
@@ -753,8 +770,8 @@ function MessageRow({
 
         {/* Meta row: severity + workspace */}
         <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
-          <SeverityTag level={msg.severity as SeverityLevel} size="sm" />
-          <Tag color="neutral" appearance="surface" size="sm" icon={<Building2 />}>
+          <SeverityTag level={msg.severity as SeverityLevel} size="small" />
+          <Tag color="neutral" appearance="surface" size="small" icon={<Building2 />}>
             {WORKSPACES.find((w) => w.id === msg.workspace)?.name ?? msg.workspace}
           </Tag>
         </div>
@@ -768,20 +785,20 @@ function MessageRow({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.92 }}
             transition={{ duration: 0.1 }}
-            className="absolute right-3 top-2.5 flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] px-1 py-1 shadow-md"
+            className="absolute right-3 top-2.5 flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] px-1 py-1 shadow-md"
             onClick={(e) => e.stopPropagation()}
           >
             {view !== 'archive' ? (
               <>
                 <Tooltip label={msg.isRead ? 'Mark as unread' : 'Mark as read'}>
                   <button onClick={(e) => { e.stopPropagation(); onMarkRead(msg.id); }}
-                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)] transition-colors">
                     {msg.isRead ? <BellOff className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
                   </button>
                 </Tooltip>
                 <Tooltip label="Archive">
                   <button onClick={(e) => { e.stopPropagation(); onArchive(msg.id); }}
-                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)] transition-colors">
                     <ArchiveIcon className="h-3.5 w-3.5" />
                   </button>
                 </Tooltip>
@@ -789,7 +806,7 @@ function MessageRow({
             ) : (
               <Tooltip label="Restore to inbox">
                 <button onClick={(e) => { e.stopPropagation(); onRestore(msg.id); }}
-                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-50)] transition-colors">
+                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--royal)] hover:bg-[var(--royal-1)] transition-colors">
                   <ArchiveRestore className="h-3.5 w-3.5" />
                 </button>
               </Tooltip>
@@ -801,24 +818,27 @@ function MessageRow({
   );
 }
 
-// ─── Filter config ────────────────────────────────────────────────────────
+// ─── Filter config (pillars = notification settings MVP groups) ────────────
 
-type NotifTypeId = NotifType;
+const PILLAR_FILTER_ICONS: Record<NotifPillar, React.ElementType> = {
+  platform: Building2,
+  hypersoc: Shield,
+  hyperautomation: Zap,
+  socrates: Bot,
+};
 
-const NOTIF_TYPES: { id: NotifTypeId; label: string; Icon: React.ElementType }[] = [
-  { id: 'workflow-failed',    label: 'Workflow Failed',   Icon: XCircle },
-  { id: 'workflow-shared',    label: 'Workflow Shared',   Icon: Zap },
-  { id: 'workspace-invite',   label: 'Workspace Invite',  Icon: UserPlus },
-  { id: 'case-mention',       label: 'Case Mention',      Icon: AtSign },
-  { id: 'socrates-approval',  label: 'Approval Request',  Icon: ThumbsUp },
-];
+const NOTIFICATION_PILLARS = NOTIFICATION_MVP_GROUPS.map((g) => ({
+  id: g.id as NotifPillar,
+  label: g.label,
+  Icon: PILLAR_FILTER_ICONS[g.id as NotifPillar],
+}));
 
 const ALL_SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
 
-// ─── Filter Popover ──────────────────────────────────────────────────────
-
 interface FilterState {
-  notifTypes: NotifTypeId[];
+  /** Selected categories (pillars); matches notification settings groups */
+  pillars: NotifPillar[];
+  /** Selected severities */
   severities: Severity[];
 }
 
@@ -852,37 +872,74 @@ function usePortalPos(
 function FilterCheckRow({
   label,
   Icon,
+  iconClassName,
   checked,
   onToggle,
 }: {
   label: string;
   Icon?: React.ElementType;
+  iconClassName?: string;
   checked: boolean;
   onToggle: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const showBox = checked || hovered;
   return (
-    <button
+    <label
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
-      className="flex w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+      onClick={(e) => e.stopPropagation()}
+      className="flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)] transition-colors"
     >
-      {/* Checkbox: invisible until hovered or checked */}
-      <span
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border transition-all ${
-          checked
-            ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]'
-            : hovered
-            ? 'border-[var(--color-border-3)]'
-            : 'invisible'
-        }`}
-      >
-        {checked && <Check className="h-2.5 w-2.5 text-white" />}
+      <span className={showBox ? 'shrink-0' : 'shrink-0 invisible'} aria-hidden={!showBox}>
+        <Checkbox checked={checked} onChange={onToggle} size="sm" aria-label={label} />
       </span>
-      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+      {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${iconClassName ?? ''}`} />}
       <span className="flex-1 text-left">{label}</span>
-    </button>
+    </label>
+  );
+}
+
+// ─── Quick enable pillar (from muted filter row) ───────────────────────────
+
+function QuickEnablePillarModal({
+  pillarId,
+  onCancel,
+  onConfirm,
+}: {
+  pillarId: NotifPillar;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const label = NOTIFICATION_MVP_GROUPS.find((g) => g.id === pillarId)?.label ?? pillarId;
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" data-quick-enable-modal role="presentation">
+      <button type="button" aria-label="Dismiss" className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-enable-title"
+        className="relative z-[1] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] p-5 shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2 id="quick-enable-title" className="text-[length:var(--font-size-body1)] font-semibold text-[var(--text-primary)]">
+          Turn on in-app notifications?
+        </h2>
+        <p className="mt-2 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] leading-relaxed">
+          You will start receiving <span className="font-medium text-[var(--text-primary)]">{label}</span> notifications in the inbox again. You can change this anytime in notification settings.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button theme="third" size="small" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button theme="primary" size="small" onClick={onConfirm}>
+            Enable
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -893,14 +950,18 @@ function FilterPopover({
   onChange,
   onClose,
   anchorEl,
+  channelSnapshot,
+  onRequestEnablePillar,
 }: {
   filter: FilterState;
   onChange: (f: FilterState) => void;
   onClose: () => void;
   anchorEl: HTMLElement | null;
+  channelSnapshot: NotifChannelState;
+  onRequestEnablePillar: (pillar: NotifPillar) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [activeSubmenu, setActiveSubmenu] = useState<'notifType' | 'severity' | null>(null);
+  const [activeSubmenu, setActiveSubmenu] = useState<'pillar' | 'severity' | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pos = usePortalPos(anchorEl, 'right');
 
@@ -913,6 +974,8 @@ function FilterPopover({
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
+      const el = e.target as HTMLElement;
+      if (el.closest?.('[data-quick-enable-modal]')) return;
       const t = e.target as Node;
       if (ref.current?.contains(t) || anchorEl?.contains(t)) return;
       onClose();
@@ -921,11 +984,12 @@ function FilterPopover({
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [onClose, anchorEl]);
 
-  function toggleNotifType(id: NotifTypeId) {
-    const next = filter.notifTypes.includes(id)
-      ? filter.notifTypes.filter((x) => x !== id)
-      : [...filter.notifTypes, id];
-    onChange({ ...filter, notifTypes: next });
+  function togglePillar(id: NotifPillar) {
+    if (!pillarInAppDelivering(channelSnapshot, id)) return;
+    const next = filter.pillars.includes(id)
+      ? filter.pillars.filter((x) => x !== id)
+      : [...filter.pillars, id];
+    onChange({ ...filter, pillars: next });
   }
 
   function toggleSeverity(s: Severity) {
@@ -935,7 +999,9 @@ function FilterPopover({
     onChange({ ...filter, severities: next });
   }
 
-  const hasFilters = filter.notifTypes.length > 0 || filter.severities.length > 0;
+  const activePillarRows = NOTIFICATION_PILLARS.filter((p) => pillarInAppDelivering(channelSnapshot, p.id));
+  const mutedPillarRows = NOTIFICATION_PILLARS.filter((p) => !pillarInAppDelivering(channelSnapshot, p.id));
+  const hasFilters = filter.pillars.length > 0 || filter.severities.length > 0;
 
   if (!pos || typeof document === 'undefined') return null;
 
@@ -947,74 +1013,101 @@ function FilterPopover({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.13 }}
-      className="w-52 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+      className="w-52 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] shadow-lg py-1"
       onMouseLeave={scheduleHide}
       onMouseEnter={cancelHide}
     >
-      {/* Notification type row */}
+      {/* Category (pillars) — aligned with notification settings groups */}
       <div
-        className={`relative flex items-center gap-2 px-3 py-2 text-[var(--font-size-sm)] cursor-default transition-colors ${
-          activeSubmenu === 'notifType'
-            ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
-            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+        className={`relative flex items-center gap-2 px-3 py-2 text-[length:var(--font-size-body1)] cursor-default transition-colors ${
+          activeSubmenu === 'pillar'
+            ? 'bg-[var(--bg-hover-level-2)] text-[var(--text-primary)]'
+            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)]'
         }`}
-        onMouseEnter={() => { cancelHide(); setActiveSubmenu('notifType'); }}
+        onMouseEnter={() => { cancelHide(); setActiveSubmenu('pillar'); }}
       >
-        <span className="flex-1">Notification type</span>
-        {filter.notifTypes.length > 0 && (
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[9px] font-bold text-white">
-            {filter.notifTypes.length}
+        <span className="flex-1">Category</span>
+        {filter.pillars.length > 0 && (
+          <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--neutral-12)] px-1 text-[9px] font-bold leading-none text-white">
+            {filter.pillars.length}
           </span>
         )}
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
 
-        {/* Notification type submenu — negative left margin bridges the gap so hover is seamless */}
-        {activeSubmenu === 'notifType' && (
+        {activeSubmenu === 'pillar' && (
           <div
-            className="absolute left-full top-0 -ml-px z-10 w-52 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+            className="absolute left-full top-0 -ml-px z-10 max-h-[min(70vh,420px)] w-60 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] shadow-lg py-1"
             onMouseEnter={cancelHide}
             onMouseLeave={scheduleHide}
           >
-            {/* invisible left-side bridge strip so diagonal cursor movement is captured */}
             <div className="absolute inset-y-0 -left-2 w-2" onMouseEnter={cancelHide} />
-            {NOTIF_TYPES.map((t) => (
+            {activePillarRows.map((t) => (
               <FilterCheckRow
                 key={t.id}
                 label={t.label}
                 Icon={t.Icon}
-                checked={filter.notifTypes.includes(t.id)}
-                onToggle={() => toggleNotifType(t.id)}
+                checked={filter.pillars.includes(t.id)}
+                onToggle={() => togglePillar(t.id)}
               />
             ))}
+            {mutedPillarRows.length > 0 && (
+              <>
+                <div className="my-1 border-t border-[var(--border-level-1)]" />
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                  Muted in settings
+                </p>
+                {mutedPillarRows.map((p) => {
+                  const PIcon = p.Icon;
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-tertiary)]"
+                    >
+                      <BellOff className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                      <PIcon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-left">{p.label}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestEnablePillar(p.id);
+                        }}
+                        className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-[length:var(--font-size-body2)] font-medium text-[var(--royal)] hover:bg-[var(--royal-1)] transition-colors"
+                      >
+                        Enable
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </div>
         )}
       </div>
 
       {/* Severity row */}
       <div
-        className={`relative flex items-center gap-2 px-3 py-2 text-[var(--font-size-sm)] cursor-default transition-colors ${
+        className={`relative flex items-center gap-2 px-3 py-2 text-[length:var(--font-size-body1)] cursor-default transition-colors ${
           activeSubmenu === 'severity'
-            ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]'
-            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+            ? 'bg-[var(--bg-hover-level-2)] text-[var(--text-primary)]'
+            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)]'
         }`}
         onMouseEnter={() => { cancelHide(); setActiveSubmenu('severity'); }}
       >
         <span className="flex-1">Severity</span>
         {filter.severities.length > 0 && (
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[9px] font-bold text-white">
+          <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--neutral-12)] px-1 text-[9px] font-bold leading-none text-white">
             {filter.severities.length}
           </span>
         )}
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
 
-        {/* Severity submenu */}
         {activeSubmenu === 'severity' && (
           <div
-            className="absolute left-full top-0 -ml-px z-10 w-48 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+            className="absolute left-full top-0 -ml-px z-10 w-48 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] shadow-lg py-1"
             onMouseEnter={cancelHide}
             onMouseLeave={scheduleHide}
           >
-            {/* invisible left-side bridge strip */}
             <div className="absolute inset-y-0 -left-2 w-2" onMouseEnter={cancelHide} />
             {ALL_SEVERITIES.map((s) => {
               const cfg = SEVERITY_CONFIG[s];
@@ -1024,6 +1117,7 @@ function FilterPopover({
                   key={s}
                   label={cfg.label}
                   Icon={Icon}
+                  iconClassName={cfg.iconClass}
                   checked={filter.severities.includes(s)}
                   onToggle={() => toggleSeverity(s)}
                 />
@@ -1033,13 +1127,12 @@ function FilterPopover({
         )}
       </div>
 
-      {/* Clear all */}
       {hasFilters && (
         <>
-          <div className="my-1 border-t border-[var(--color-border-1)]" />
+          <div className="my-1 border-t border-[var(--border-level-1)]" />
           <button
-            onClick={() => { onChange({ notifTypes: [], severities: [] }); onClose(); }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-red-500)] transition-colors"
+            onClick={() => { onChange({ pillars: [], severities: [] }); onClose(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--ruby-10)] transition-colors"
           >
             <X className="h-3.5 w-3.5 shrink-0" />
             Clear all filters
@@ -1051,20 +1144,302 @@ function FilterPopover({
   );
 }
 
+type FilterEditorFamily = 'severity' | 'pillar';
+
+function FilterFamilyEditorPopover({
+  family,
+  filter,
+  onChange,
+  onClose,
+  anchorEl,
+  channelSnapshot,
+  onRequestEnablePillar,
+}: {
+  family: FilterEditorFamily;
+  filter: FilterState;
+  onChange: (f: FilterState) => void;
+  onClose: () => void;
+  anchorEl: HTMLElement | null;
+  channelSnapshot: NotifChannelState;
+  onRequestEnablePillar: (pillar: NotifPillar) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const pos = usePortalPos(anchorEl, 'left', 8);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      const el = e.target as HTMLElement;
+      if (el.closest?.('[data-quick-enable-modal]')) return;
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || anchorEl?.contains(t)) return;
+      onClose();
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [onClose, anchorEl]);
+
+  if (!pos || typeof document === 'undefined') return null;
+
+  if (family === 'severity') {
+    return createPortal(
+      <motion.div
+        ref={ref}
+        style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
+        initial={{ opacity: 0, y: -6, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -6, scale: 0.97 }}
+        transition={{ duration: 0.13 }}
+        className="w-56 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] p-1 shadow-lg"
+      >
+        {ALL_SEVERITIES.map((s) => {
+          const cfg = SEVERITY_CONFIG[s];
+          const Icon = cfg.Icon;
+          const next = filter.severities.includes(s)
+            ? filter.severities.filter((x) => x !== s)
+            : [...filter.severities, s];
+          return (
+            <FilterCheckRow
+              key={s}
+              label={cfg.label}
+              Icon={Icon}
+              iconClassName={cfg.iconClass}
+              checked={filter.severities.includes(s)}
+              onToggle={() => onChange({ ...filter, severities: next })}
+            />
+          );
+        })}
+      </motion.div>,
+      document.body,
+    );
+  }
+
+  const activePillarRows = NOTIFICATION_PILLARS.filter((p) => pillarInAppDelivering(channelSnapshot, p.id));
+  const mutedPillarRows = NOTIFICATION_PILLARS.filter((p) => !pillarInAppDelivering(channelSnapshot, p.id));
+
+  return createPortal(
+    <motion.div
+      ref={ref}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
+      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+      transition={{ duration: 0.13 }}
+      className="max-h-[min(70vh,420px)] w-64 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] p-1 shadow-lg"
+    >
+      {activePillarRows.map((row) => {
+        const next = filter.pillars.includes(row.id)
+          ? filter.pillars.filter((x) => x !== row.id)
+          : [...filter.pillars, row.id];
+        return (
+          <FilterCheckRow
+            key={row.id}
+            label={row.label}
+            Icon={row.Icon}
+            checked={filter.pillars.includes(row.id)}
+            onToggle={() => onChange({ ...filter, pillars: next })}
+          />
+        );
+      })}
+
+      {mutedPillarRows.length > 0 && (
+        <>
+          <div className="my-1 border-t border-[var(--border-level-1)]" />
+          <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+            Muted in settings
+          </p>
+          {mutedPillarRows.map((row) => {
+            const PIcon = row.Icon;
+            return (
+              <div
+                key={row.id}
+                className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-tertiary)]"
+              >
+                <BellOff className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                <PIcon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-left">{row.label}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestEnablePillar(row.id);
+                  }}
+                  className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-[length:var(--font-size-body2)] font-medium text-[var(--royal)] hover:bg-[var(--royal-1)] transition-colors"
+                >
+                  Enable
+                </button>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </motion.div>,
+    document.body,
+  );
+}
+
+function formatSeverityFilterSummary(severities: Severity[]): string {
+  return ALL_SEVERITIES.filter((s) => severities.includes(s)).map((s) => SEVERITY_CONFIG[s].label).join(', ');
+}
+
+function formatTypeFilterSummary(pillars: NotifPillar[]): string {
+  return NOTIFICATION_PILLARS.filter((p) => pillars.includes(p.id)).map((p) => p.label).join(', ');
+}
+
+function AppliedFiltersChipBar({
+  filter,
+  onChange,
+  onClearSeverities,
+  onClearPillars,
+  onClearAll,
+  channelSnapshot,
+  onRequestEnablePillar,
+  onBeginQuickEdit,
+  showBottomBorder = false,
+}: {
+  filter: FilterState;
+  onChange: (f: FilterState) => void;
+  onClearSeverities: () => void;
+  onClearPillars: () => void;
+  onClearAll: () => void;
+  channelSnapshot: NotifChannelState;
+  onRequestEnablePillar: (pillar: NotifPillar) => void;
+  onBeginQuickEdit?: () => void;
+  showBottomBorder?: boolean;
+}) {
+  const hasSeverity = filter.severities.length > 0;
+  const hasType = filter.pillars.length > 0;
+  const [editingFamily, setEditingFamily] = useState<FilterEditorFamily | null>(null);
+  const [addPopoverOpen, setAddPopoverOpen] = useState(false);
+  const severityChipRef = useRef<HTMLButtonElement>(null);
+  const typeChipRef = useRef<HTMLButtonElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (editingFamily === 'severity' && filter.severities.length === 0) {
+      setEditingFamily(null);
+    }
+    if (editingFamily === 'pillar' && filter.pillars.length === 0) {
+      setEditingFamily(null);
+    }
+  }, [editingFamily, filter.severities.length, filter.pillars.length]);
+
+  if (!hasSeverity && !hasType) return null;
+
+  return (
+    <>
+      <div className={`w-full shrink-0 bg-[var(--surface)] p-2 ${showBottomBorder ? 'border-b border-[var(--border-level-1)]' : ''}`}>
+        <AppliedFiltersBar
+          trailing={
+            <button
+              type="button"
+              onClick={() => {
+                setEditingFamily(null);
+                setAddPopoverOpen(false);
+                onClearAll();
+              }}
+              className="pointer-events-none shrink-0 self-start px-2 py-0.5 text-[length:var(--font-size-body2)] font-medium text-[var(--text-tertiary)] underline-offset-2 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:text-[var(--royal)] hover:underline focus:pointer-events-auto focus:opacity-100"
+            >
+              Clear all
+            </button>
+          }
+        >
+          {hasSeverity && (
+            <FilterChip
+              icon={<AlertTriangle className="h-3 w-3" strokeWidth={2} aria-hidden />}
+              familyLabel="Severity"
+              valueSummary={formatSeverityFilterSummary(filter.severities)}
+              chipButtonRef={severityChipRef}
+              expanded={editingFamily === 'severity'}
+              onEdit={() => {
+                onBeginQuickEdit?.();
+                setAddPopoverOpen(false);
+                setEditingFamily((prev) => (prev === 'severity' ? null : 'severity'));
+              }}
+              onRemove={() => {
+                setEditingFamily((prev) => (prev === 'severity' ? null : prev));
+                onClearSeverities();
+              }}
+              removeLabel="Clear severity filters"
+            />
+          )}
+          {hasType && (
+            <FilterChip
+              icon={<Layers className="h-3 w-3" strokeWidth={2} aria-hidden />}
+              familyLabel="Type"
+              valueSummary={formatTypeFilterSummary(filter.pillars)}
+              chipButtonRef={typeChipRef}
+              expanded={editingFamily === 'pillar'}
+              onEdit={() => {
+                onBeginQuickEdit?.();
+                setAddPopoverOpen(false);
+                setEditingFamily((prev) => (prev === 'pillar' ? null : 'pillar'));
+              }}
+              onRemove={() => {
+                setEditingFamily((prev) => (prev === 'pillar' ? null : prev));
+                onClearPillars();
+              }}
+              removeLabel="Clear type filters"
+            />
+          )}
+          <button
+            ref={addBtnRef}
+            type="button"
+            onClick={() => {
+              onBeginQuickEdit?.();
+              setEditingFamily(null);
+              setAddPopoverOpen((prev) => !prev);
+            }}
+            aria-expanded={addPopoverOpen}
+            aria-label="Add filter"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-full)] text-[var(--text-primary)] transition-colors hover:bg-[var(--filter-chip-bg)] hover:shadow-[0_1px_2px_rgba(9,10,11,0.06)]"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+          </button>
+        </AppliedFiltersBar>
+      </div>
+
+      <AnimatePresence>
+        {editingFamily && (
+          <FilterFamilyEditorPopover
+            family={editingFamily}
+            filter={filter}
+            onChange={onChange}
+            onClose={() => setEditingFamily(null)}
+            anchorEl={editingFamily === 'severity' ? severityChipRef.current : typeChipRef.current}
+            channelSnapshot={channelSnapshot}
+            onRequestEnablePillar={onRequestEnablePillar}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {addPopoverOpen && (
+          <FilterPopover
+            filter={filter}
+            onChange={onChange}
+            onClose={() => setAddPopoverOpen(false)}
+            anchorEl={addBtnRef.current}
+            channelSnapshot={channelSnapshot}
+            onRequestEnablePillar={onRequestEnablePillar}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 // ─── Workspace Popover ────────────────────────────────────────────────────
 
 function WsCheckbox({ checked, partial }: { checked: boolean; partial?: boolean }) {
   return (
-    <span
-      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
-        checked || partial
-          ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]'
-          : 'border-[var(--color-border-3)] bg-white'
-      }`}
-    >
-      {checked && !partial && <Check className="h-2.5 w-2.5 text-white stroke-[3]" />}
-      {partial && <span className="h-0.5 w-2 rounded-full bg-white" />}
-    </span>
+    <Checkbox
+      checked={checked && !partial}
+      indeterminate={Boolean(partial && !checked)}
+      onChange={() => {}}
+      size="sm"
+      className="pointer-events-none"
+      aria-hidden
+    />
   );
 }
 
@@ -1123,17 +1498,17 @@ function WorkspacePopover({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.14 }}
-      className="w-56 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-xl overflow-hidden"
+      className="w-56 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] shadow-xl overflow-hidden"
     >
       {/* Search */}
-      <div className="flex items-center gap-2 border-b border-[var(--color-border-1)] px-3 py-2.5">
-        <Search className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+      <div className="flex items-center gap-2 border-b border-[var(--border-level-1)] px-3 py-2.5">
+        <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
         <input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find workspace..."
-          className="flex-1 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none"
+          className="flex-1 bg-transparent text-[length:var(--font-size-body1)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none"
         />
       </div>
 
@@ -1141,7 +1516,7 @@ function WorkspacePopover({
         {/* All workspaces row */}
         <button
           onClick={toggleAll}
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-primary)] hover:bg-[var(--bg-hover-level-2)] transition-colors"
         >
           <WsCheckbox checked={allSelected} partial={!allSelected && local.length > 0} />
           <span className="flex-1 text-left font-medium">
@@ -1149,7 +1524,7 @@ function WorkspacePopover({
           </span>
         </button>
 
-        <div className="mx-3 my-1 border-t border-[var(--color-border-1)]" />
+        <div className="mx-3 my-1 border-t border-[var(--border-level-1)]" />
 
         {/* Individual workspace rows */}
         {filtered.map((ws) => {
@@ -1158,13 +1533,13 @@ function WorkspacePopover({
             <button
               key={ws.id}
               onClick={() => toggleWs(ws.id)}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] hover:bg-[var(--color-surface-tertiary)] transition-colors"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-[length:var(--font-size-body1)] hover:bg-[var(--bg-hover-level-2)] transition-colors"
             >
               <WsCheckbox checked={isChecked} />
               <span className="flex flex-col items-start min-w-0">
-                <span className="truncate text-[var(--color-text-primary)]">{ws.name}</span>
+                <span className="truncate text-[var(--text-primary)]">{ws.name}</span>
                 {ws.isCurrent && (
-                  <span className="text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
+                  <span className="text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]">
                     Current workspace
                   </span>
                 )}
@@ -1174,7 +1549,7 @@ function WorkspacePopover({
         })}
 
         {filtered.length === 0 && (
-          <p className="px-3 py-3 text-center text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">
+          <p className="px-3 py-3 text-center text-[length:var(--font-size-body1)] text-[var(--text-tertiary)]">
             No workspaces found
           </p>
         )}
@@ -1218,7 +1593,7 @@ function MoreMenu({
   }, [onClose, anchorEl]);
 
   const btnClass =
-    'flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors';
+    'flex w-full items-center gap-2.5 px-3 py-2 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)] transition-colors';
 
   if (!pos || typeof document === 'undefined') return null;
 
@@ -1230,7 +1605,7 @@ function MoreMenu({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: -6 }}
       transition={{ duration: 0.13 }}
-      className="w-56 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] shadow-lg py-1"
+      className="w-56 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] shadow-lg py-1"
     >
       <button onClick={() => { onMarkAllRead(); onClose(); }} className={btnClass}>
         <CheckCheck className="h-3.5 w-3.5 shrink-0" />
@@ -1244,12 +1619,12 @@ function MoreMenu({
         <ArchiveIcon className="h-3.5 w-3.5 shrink-0" />
         Archive read
       </button>
-      <div className="my-1 border-t border-[var(--color-border-1)]" />
+      <div className="my-1 border-t border-[var(--border-level-1)]" />
       <button onClick={() => { onViewArchive(); onClose(); }} className={btnClass}>
         <Eye className="h-3.5 w-3.5 shrink-0" />
         View archive
       </button>
-      <div className="my-1 border-t border-[var(--color-border-1)]" />
+      <div className="my-1 border-t border-[var(--border-level-1)]" />
       <button
         onClick={() => {
           window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'notifications' }));
@@ -1276,16 +1651,22 @@ export interface InboxPanelProps {
 
 export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: InboxPanelProps) {
   const [view, setView] = useState<View>('all');
-  const [prevView, setPrevView] = useState<'all' | 'unread'>('all');
+  const [prevView, setPrevView] = useState<'all' | 'unread' | 'needs-action'>('all');
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState('');
   const archiveSearchRef = useRef<HTMLInputElement>(null);
-  const [filter, setFilter] = useState<FilterState>({ notifTypes: [], severities: [] });
+  const [filter, setFilter] = useState<FilterState>({ pillars: [], severities: [] });
   const [filterOpen, setFilterOpen] = useState(false);
+  const [channelSnapshot, setChannelSnapshot] = useState<NotifChannelState>(() => getInitialNotificationSettingsState().channels);
+  const [quickEnablePillar, setQuickEnablePillar] = useState<NotifPillar | null>(null);
+  const [filterToast, setFilterToast] = useState<string | null>(null);
+  const filterToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inboxScrolled, setInboxScrolled] = useState(false);
+  const [archiveScrolled, setArchiveScrolled] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [headerHovered, setHeaderHovered] = useState(false);
+  const [panelHovered, setPanelHovered] = useState(false);
   const [wsFilter, setWsFilter] = useState<string[]>([]);  // empty = all
   const [wsOpen, setWsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1301,7 +1682,33 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
   const [undoToast, setUndoToast] = useState<{ ids: string[]; label: string } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => { if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }, []);
+  useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    if (filterToastTimerRef.current) clearTimeout(filterToastTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    function syncChannels() {
+      setChannelSnapshot(getInitialNotificationSettingsState().channels);
+    }
+    syncChannels();
+    function onStorage(e: StorageEvent) {
+      if (e.key === NOTIF_SETTINGS_STORAGE_KEY || e.key === null) syncChannels();
+    }
+    window.addEventListener(NOTIF_SETTINGS_SAVED_EVENT, syncChannels);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(NOTIF_SETTINGS_SAVED_EVENT, syncChannels);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    setFilter((f) => ({
+      ...f,
+      pillars: f.pillars.filter((p) => pillarInAppDelivering(channelSnapshot, p)),
+    }));
+  }, [channelSnapshot]);
 
   const wsLabel =
     wsFilter.length === 0
@@ -1394,11 +1801,27 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
     );
   }, []);
 
-  function removeSeverityFilter(s: Severity) {
-    setFilter((f) => ({ ...f, severities: f.severities.filter((x) => x !== s) }));
+  function showFilterToast(message: string) {
+    if (filterToastTimerRef.current) clearTimeout(filterToastTimerRef.current);
+    setFilterToast(message);
+    filterToastTimerRef.current = setTimeout(() => {
+      setFilterToast(null);
+      filterToastTimerRef.current = null;
+    }, 2600);
   }
-  function removeNotifTypeFilter(id: NotifTypeId) {
-    setFilter((f) => ({ ...f, notifTypes: f.notifTypes.filter((x) => x !== id) }));
+
+  function confirmQuickEnable() {
+    if (!quickEnablePillar) return;
+    saveQuickEnablePillar(quickEnablePillar);
+    setQuickEnablePillar(null);
+    window.setTimeout(() => showFilterToast('Updated successfully'), 0);
+  }
+
+  function removeSeverityFilter() {
+    setFilter((f) => ({ ...f, severities: [] }));
+  }
+  function removePillarFilter() {
+    setFilter((f) => ({ ...f, pillars: [] }));
   }
 
   function matchesWorkspace(m: Message) {
@@ -1407,7 +1830,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
   }
 
   function goToArchive() {
-    if (view !== 'archive') setPrevView(view as 'all' | 'unread');
+    if (view !== 'archive') setPrevView(view as 'all' | 'unread' | 'needs-action');
     setView('archive');
     setSearch('');
     setSearchOpen(false);
@@ -1423,13 +1846,14 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
   const inboxVisible = messages.filter((m) => {
     if (m.isArchived) return false;
     if (view === 'unread' && m.isRead) return false;
+    if (view === 'needs-action' && !messageNeedsAction(m)) return false;
     if (search) {
       const q = search.toLowerCase();
       const match = m.source.toLowerCase().includes(q) || m.subHeader.toLowerCase().includes(q) || m.preview.toLowerCase().includes(q);
       if (!match) return false;
     }
     if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
-    if (filter.notifTypes.length > 0 && !filter.notifTypes.includes(m.type as NotifTypeId)) return false;
+    if (filter.pillars.length > 0 && !filter.pillars.includes(messagePillar(m))) return false;
     if (!matchesWorkspace(m)) return false;
     return true;
   });
@@ -1442,12 +1866,14 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
       if (!match) return false;
     }
     if (filter.severities.length > 0 && !filter.severities.includes(m.severity)) return false;
+    if (filter.pillars.length > 0 && !filter.pillars.includes(messagePillar(m))) return false;
     if (!matchesWorkspace(m)) return false;
     return true;
   });
 
   const unreadCount = messages.filter((m) => !m.isArchived && !m.isRead).length;
-  const activeFilterCount = filter.notifTypes.length + filter.severities.length;
+  const needsActionCount = messages.filter((m) => !m.isArchived && messageNeedsAction(m)).length;
+  const activeFilterCount = filter.pillars.length + filter.severities.length;
 
   function toggleSearch() {
     setSearchOpen((o) => {
@@ -1463,11 +1889,13 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
         <motion.div
           key="inbox-panel"
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: 400, opacity: 1 }}
+          animate={{ width: 480, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-          className="relative shrink-0 h-full overflow-hidden bg-[var(--color-surface-primary)] flex flex-col"
+          className="relative shrink-0 h-full overflow-hidden bg-[var(--surface)] flex flex-col font-[family-name:var(--font-family)]"
           style={{ minWidth: 0, boxShadow: '12px 0 40px 0 rgba(0,0,0,0.08), 1px 0 0 0 rgba(0,0,0,0.06)', clipPath: 'inset(0 -60px 0 0)' }}
+          onMouseEnter={() => setPanelHovered(true)}
+          onMouseLeave={() => setPanelHovered(false)}
         >
 
           {/* ══════════════════════════════════════════════════
@@ -1475,12 +1903,8 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
           ══════════════════════════════════════════════════ */}
 
           {/* Inbox Row 1: Inbox | workspace | collapse | ⋮ */}
-          <div
-            className="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0"
-            onMouseEnter={() => setHeaderHovered(true)}
-            onMouseLeave={() => setHeaderHovered(false)}
-          >
-            <span className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)] leading-none">
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+            <span className="text-[length:var(--font-size-body0)] font-semibold text-[var(--text-primary)] leading-none">
               Inbox
             </span>
 
@@ -1489,7 +1913,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
               <button
                 ref={wsBtnRef}
                 onClick={() => { setWsOpen((o) => !o); setFilterOpen(false); setMoreOpen(false); }}
-                className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-neutral-100)] px-2.5 py-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] transition-colors"
+                className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--neutral-2)] px-2.5 py-1 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] hover:bg-[var(--bg-active-level-1)] transition-colors"
               >
                 <span>{wsLabel}</span>
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${wsOpen ? 'rotate-180' : ''}`} />
@@ -1508,9 +1932,9 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
 
             <div className="flex-1" />
 
-            {/* Collapse button — appears on header hover */}
+            {/* Collapse button — appears on panel hover */}
             <AnimatePresence>
-              {headerHovered && (
+              {panelHovered && (
                 <motion.button
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1518,7 +1942,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                   transition={{ duration: 0.12 }}
                   onClick={onClose}
                   title="Collapse panel"
-                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors"
+                  className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)] transition-colors"
                 >
                   <ChevronsLeft className="h-4 w-4" />
                 </motion.button>
@@ -1530,7 +1954,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
               <button
                 ref={moreBtnRef}
                 onClick={() => { setMoreOpen((o) => !o); setFilterOpen(false); setWsOpen(false); }}
-                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--bg-hover-level-2)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)]'}`}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
@@ -1547,33 +1971,34 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
           </div>
 
           {/* Inbox Row 2: Tabs ↔ inline search + filter */}
-          <div className="flex items-center border-b border-[var(--color-border-2)] px-4 shrink-0 min-h-[40px]">
+          <div className="flex items-center border-b border-[var(--border-level-2)] px-4 shrink-0 min-h-[40px]">
             <div className="flex-1 overflow-hidden relative">
               <AnimatePresence mode="wait" initial={false}>
                 {searchOpen ? (
                   <motion.div key="search-input" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.15, ease: 'easeOut' }} className="flex items-center gap-2 py-2">
-                    <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 shrink-0 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+                    <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 shrink-0 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)] transition-colors">
                       <X className="h-3.5 w-3.5" />
                     </button>
-                    <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search all notifications…" className="flex-1 min-w-0 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none" />
+                    <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search all notifications…" className="flex-1 min-w-0 bg-transparent text-[length:var(--font-size-body1)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none" />
                   </motion.div>
                 ) : (
                   <motion.div key="tabs" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, ease: 'easeOut' }} className="flex items-center">
                     {([
                       { id: 'all' as const, label: 'All' },
                       { id: 'unread' as const, label: 'Unread', count: unreadCount },
+                      { id: 'needs-action' as const, label: 'Needs action', count: needsActionCount },
                     ]).map((tab) => (
                       <button key={tab.id} onClick={() => setView(tab.id)}
-                        className={`relative flex items-center gap-1.5 pb-2.5 pt-1 mr-4 text-[var(--font-size-sm)] transition-colors ${view === tab.id ? 'font-semibold text-[var(--color-text-primary)]' : 'font-normal text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                        className={`relative flex items-center gap-1.5 pb-2.5 pt-1 mr-4 text-[length:var(--font-size-body1)] transition-colors ${view === tab.id ? 'font-semibold text-[var(--text-primary)]' : 'font-normal text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
                       >
                         {tab.label}
                         {tab.count !== undefined && tab.count > 0 && (
-                          <span className="flex h-4 min-w-[18px] items-center justify-center rounded-full bg-[var(--color-primary-100)] px-1 text-[var(--font-size-xs)] font-semibold text-[var(--color-primary-500)]">
+                          <span className="flex h-4 min-w-[18px] items-center justify-center rounded-full bg-[var(--neutral-2)] px-1 text-[length:var(--font-size-body2)] font-semibold text-[var(--text-primary)]">
                             {tab.count}
                           </span>
                         )}
                         {view === tab.id && (
-                          <motion.span layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[var(--color-text-primary)]" transition={{ duration: 0.18, ease: 'easeInOut' }} />
+                          <motion.span layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[var(--text-primary)]" transition={{ duration: 0.18, ease: 'easeInOut' }} />
                         )}
                       </button>
                     ))}
@@ -1583,7 +2008,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
             </div>
 
             {!searchOpen && (
-              <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+              <button onClick={toggleSearch} className="flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)] transition-colors">
                 <Search className="h-4 w-4" />
               </button>
             )}
@@ -1592,46 +2017,48 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
               <button
                 ref={filterBtnRef}
                 onClick={() => { setFilterOpen((o) => !o); setMoreOpen(false); setWsOpen(false); }}
-                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 mb-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--neutral-2)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)]'}`}
               >
                 <ListFilter className="h-4 w-4" />
                 {activeFilterCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[9px] font-bold text-white">
+                  <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--neutral-12)] text-[9px] font-bold text-white">
                     {activeFilterCount}
                   </span>
                 )}
               </button>
               <AnimatePresence>
-                {filterOpen && <FilterPopover anchorEl={filterBtnRef.current} filter={filter} onChange={setFilter} onClose={() => setFilterOpen(false)} />}
+                {filterOpen && (
+                  <FilterPopover
+                    anchorEl={filterBtnRef.current}
+                    filter={filter}
+                    onChange={setFilter}
+                    onClose={() => setFilterOpen(false)}
+                    channelSnapshot={channelSnapshot}
+                    onRequestEnablePillar={(p) => setQuickEnablePillar(p)}
+                  />
+                )}
               </AnimatePresence>
             </div>
           </div>
 
-          {/* Inbox active filter chips */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
-              {filter.severities.map((s) => (
-                <SeverityTag key={s} level={s as SeverityLevel} size="sm" onRemove={() => removeSeverityFilter(s)} />
-              ))}
-              {filter.notifTypes.map((id) => {
-                const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
-                const Icon = cfg.Icon;
-                return (
-                  <Tag key={id} color="neutral" appearance="surface" size="sm"
-                    icon={<Icon />} onRemove={() => removeNotifTypeFilter(id)}>
-                    {cfg.label}
-                  </Tag>
-                );
-              })}
-              <Button variant="ghost" size="sm" onClick={() => setFilter({ notifTypes: [], severities: [] })}
-                className="!h-auto !px-1.5 !py-0.5 !text-[var(--font-size-xs)] !text-[var(--color-text-tertiary)] hover:!text-[var(--color-red-500)]">
-                Clear all
-              </Button>
-            </div>
-          )}
+          {/* Applied filters — quick-edit from chip */}
+          <AppliedFiltersChipBar
+            filter={filter}
+            onChange={setFilter}
+            onClearSeverities={removeSeverityFilter}
+            onClearPillars={removePillarFilter}
+            onClearAll={() => setFilter({ pillars: [], severities: [] })}
+            channelSnapshot={channelSnapshot}
+            onRequestEnablePillar={(p) => setQuickEnablePillar(p)}
+            onBeginQuickEdit={() => setFilterOpen(false)}
+            showBottomBorder={inboxScrolled}
+          />
 
           {/* Inbox message list */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div
+            className="flex-1 overflow-y-auto overflow-x-hidden"
+            onScroll={(e) => setInboxScrolled(e.currentTarget.scrollTop > 0)}
+          >
             {inboxVisible.length === 0 ? (
               <EmptyState view={view} />
             ) : (
@@ -1669,19 +2096,19 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-                className="absolute inset-0 bg-[var(--color-surface-primary)] flex flex-col z-10"
+                className="absolute inset-0 bg-[var(--surface)] flex flex-col z-10"
                 style={{ boxShadow: '-4px 0 20px 0 rgba(0,0,0,0.08)' }}
               >
                 {/* Archive Row 1: ← | Archived | workspace | ⋮ */}
                 <div className="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
                   <button
                     onClick={goBackFromArchive}
-                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
+                    className="flex items-center justify-center rounded-[var(--radius-sm)] p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)] transition-colors"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </button>
 
-                  <span className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)] leading-none">
+                  <span className="text-[length:var(--font-size-body0)] font-semibold text-[var(--text-primary)] leading-none">
                     Archived
                   </span>
 
@@ -1690,7 +2117,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                     <button
                       ref={archiveWsBtnRef}
                       onClick={() => { setWsOpen((o) => !o); setFilterOpen(false); setMoreOpen(false); }}
-                      className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--color-neutral-100)] px-2.5 py-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-neutral-150)] transition-colors"
+                      className="flex items-center gap-1 rounded-[var(--radius-md)] bg-[var(--neutral-2)] px-2.5 py-1 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] hover:bg-[var(--bg-active-level-1)] transition-colors"
                     >
                       <span>{wsLabel}</span>
                       <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${wsOpen ? 'rotate-180' : ''}`} />
@@ -1714,7 +2141,7 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                     <button
                       ref={archiveMoreBtnRef}
                       onClick={() => { setMoreOpen((o) => !o); setFilterOpen(false); setWsOpen(false); }}
-                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1.5 transition-colors ${moreOpen ? 'bg-[var(--bg-hover-level-2)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)]'}`}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </button>
@@ -1731,17 +2158,17 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                 </div>
 
                 {/* Archive Row 2: always-visible search + filter */}
-                <div className="flex items-center gap-2 border-b border-[var(--color-border-2)] px-4 py-2.5 shrink-0">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+                <div className="flex items-center gap-2 border-b border-[var(--border-level-2)] px-4 py-2.5 shrink-0">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-[var(--text-tertiary)]" />
                   <input
                     ref={archiveSearchRef}
                     value={archiveSearch}
                     onChange={(e) => setArchiveSearch(e.target.value)}
                     placeholder="Search in archive…"
-                    className="flex-1 min-w-0 bg-transparent text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none"
+                    className="flex-1 min-w-0 bg-transparent text-[length:var(--font-size-body1)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none"
                   />
                   {archiveSearch && (
-                    <button onClick={() => setArchiveSearch('')} className="shrink-0 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors">
+                    <button onClick={() => setArchiveSearch('')} className="shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -1750,46 +2177,48 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                     <button
                       ref={archiveFilterBtnRef}
                       onClick={() => { setFilterOpen((o) => !o); setMoreOpen(false); setWsOpen(false); }}
-                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-secondary)]'}`}
+                      className={`flex items-center justify-center rounded-[var(--radius-sm)] p-1 transition-colors ${filterOpen || activeFilterCount > 0 ? 'bg-[var(--royal-1)] text-[var(--royal)]' : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-secondary)]'}`}
                     >
                       <ListFilter className="h-4 w-4" />
                       {activeFilterCount > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--color-primary-500)] text-[9px] font-bold text-white">
+                        <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--neutral-12)] text-[9px] font-bold text-white">
                           {activeFilterCount}
                         </span>
                       )}
                     </button>
                     <AnimatePresence>
-                      {filterOpen && <FilterPopover anchorEl={archiveFilterBtnRef.current} filter={filter} onChange={setFilter} onClose={() => setFilterOpen(false)} />}
+                      {filterOpen && (
+                        <FilterPopover
+                          anchorEl={archiveFilterBtnRef.current}
+                          filter={filter}
+                          onChange={setFilter}
+                          onClose={() => setFilterOpen(false)}
+                          channelSnapshot={channelSnapshot}
+                          onRequestEnablePillar={(p) => setQuickEnablePillar(p)}
+                        />
+                      )}
                     </AnimatePresence>
                   </div>
                 </div>
 
-                {/* Archive active filter chips */}
-                {activeFilterCount > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border-1)] px-4 py-2 shrink-0">
-                    {filter.severities.map((s) => (
-                      <SeverityTag key={s} level={s as SeverityLevel} size="sm" onRemove={() => removeSeverityFilter(s)} />
-                    ))}
-                    {filter.notifTypes.map((id) => {
-                      const cfg = NOTIF_TYPES.find((t) => t.id === id)!;
-                      const Icon = cfg.Icon;
-                      return (
-                        <Tag key={id} color="neutral" appearance="surface" size="sm"
-                          icon={<Icon />} onRemove={() => removeNotifTypeFilter(id)}>
-                          {cfg.label}
-                        </Tag>
-                      );
-                    })}
-                    <Button variant="ghost" size="sm" onClick={() => setFilter({ notifTypes: [], severities: [] })}
-                      className="!h-auto !px-1.5 !py-0.5 !text-[var(--font-size-xs)] !text-[var(--color-text-tertiary)] hover:!text-[var(--color-red-500)]">
-                      Clear all
-                    </Button>
-                  </div>
-                )}
+                {/* Archive applied filters — quick-edit from chip */}
+                <AppliedFiltersChipBar
+                  filter={filter}
+                  onChange={setFilter}
+                  onClearSeverities={removeSeverityFilter}
+                  onClearPillars={removePillarFilter}
+                  onClearAll={() => setFilter({ pillars: [], severities: [] })}
+                  channelSnapshot={channelSnapshot}
+                  onRequestEnablePillar={(p) => setQuickEnablePillar(p)}
+                  onBeginQuickEdit={() => setFilterOpen(false)}
+                  showBottomBorder={archiveScrolled}
+                />
 
                 {/* Archive message list */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                <div
+                  className="flex-1 overflow-y-auto overflow-x-hidden"
+                  onScroll={(e) => setArchiveScrolled(e.currentTarget.scrollTop > 0)}
+                >
                   {archiveVisible.length === 0 ? (
                     <EmptyState view="archive" />
                   ) : (
@@ -1818,6 +2247,32 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
             )}
           </AnimatePresence>
 
+          {/* ── Quick enable pillar modal ── */}
+          {quickEnablePillar && (
+            <QuickEnablePillarModal
+              pillarId={quickEnablePillar}
+              onCancel={() => setQuickEnablePillar(null)}
+              onConfirm={confirmQuickEnable}
+            />
+          )}
+
+          <AnimatePresence>
+            {filterToast && (
+              <motion.div
+                key="filter-toast"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18 }}
+                className="absolute bottom-16 left-3 right-3 z-[25] flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] px-3 py-2.5 shadow-lg"
+                role="status"
+              >
+                <Check className="h-3.5 w-3.5 shrink-0 text-[#29CA88]" />
+                <span className="text-[length:var(--font-size-body2)] font-medium text-[var(--text-primary)]">{filterToast}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* ── Undo archive toast ── */}
           <AnimatePresence>
             {undoToast && (
@@ -1827,15 +2282,15 @@ export function InboxPanel({ isOpen, onClose, onNavigate, onOpenSettings }: Inbo
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.18 }}
-                className="absolute bottom-4 left-3 right-3 z-20 flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--color-neutral-800)] px-3 py-2.5 shadow-xl"
+                className="absolute bottom-4 left-3 right-3 z-20 flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--neutral-10)] px-3 py-2.5 shadow-xl"
               >
                 <div className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-[#29CA88] shrink-0" />
-                  <span className="text-[var(--font-size-xs)] text-[var(--color-neutral-100)]">{undoToast.label}</span>
+                  <span className="text-[length:var(--font-size-body2)] text-[var(--neutral-2)]">{undoToast.label}</span>
                 </div>
                 <button
                   onClick={handleUndoArchive}
-                  className="text-[var(--font-size-xs)] text-[var(--color-neutral-300)] underline underline-offset-2 hover:text-white transition-colors ml-3"
+                  className="text-[length:var(--font-size-body2)] text-[var(--color-neutral-300)] underline underline-offset-2 hover:text-white transition-colors ml-3"
                 >
                   Undo
                 </button>

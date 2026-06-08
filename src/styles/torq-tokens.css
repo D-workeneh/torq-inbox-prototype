@@ -1,0 +1,141 @@
+/* Torq Design System v1.1 — semantic tokens (from design-system/src/assets/tokens.css) */
+
+:root {
+  --neutral-1: #ffffff;
+  --neutral-2: #f5f6fa;
+  --neutral-3: #dddee5;
+  --neutral-4: #cbcdd6;
+  --neutral-5: #afb2bc;
+  --neutral-6: #9a9da8;
+  --neutral-7: #777a86;
+  --neutral-8: #5d5f6b;
+  --neutral-9: #4a4d57;
+  --neutral-10: #383a42;
+  --neutral-11: #25262c;
+  --neutral-12: #090a0b;
+
+  --royal: #2864ff;
+  --royal-1: #f0f5ff;
+  --forest: #16a86c;
+  --forest-1: #ecfff7;
+  --ruby: #ea231a;
+  --ruby-1: #ffefef;
+  --carrot: #ed6e1c;
+  --carrot-1: #fff1e1;
+  --canary-1: #fdf8d9;
+  --torquoise: #00a6c1;
+  --torquoise-1: #effcff;
+
+  --background: #ffffff;
+  --surface: #ffffff;
+  --bg-static-2: #fafafc;
+  --bg-static-3: #f5f6fa;
+  --bg-hover-level-1: #fafafc;
+  --bg-hover-level-2: #f5f6fa;
+  --bg-active-level-1: #ebecf2;
+  --bg-active-level-2: #dddee5;
+
+  --border-level-1: #f5f6fa;
+  --border-level-2: #dddee5;
+  --border-level-3: #cbcdd6;
+  --border-level-4: #090a0b;
+
+  --text-primary: #090a0b;
+  --text-secondary: #5d5f6b;
+  --text-tertiary: #777a86;
+  --text-placeholder: #afb2bc;
+  --text-disabled: #cbcdd6;
+  --text-on-primary: #ffffff;
+
+  --button-primary-bg-static: #090a0b;
+  --button-primary-bg-hover: #383a42;
+  --button-primary-bg-active: #25262c;
+  --button-secondary-bg-static: #ffffff;
+  --button-secondary-bg-hover: #f5f6fa;
+  --button-secondary-bg-active: #ebecf2;
+  --button-secondary-border: #cbcdd6;
+  --button-secondary-border-disabled: #dddee5;
+  --button-secondary-content: #090a0b;
+  --button-secondary-content-disabled: #9a9da8;
+  --button-third-bg-hover: #f5f6fa;
+  --button-danger-bg-static: #c81010;
+  --button-danger-bg-hover: #a10d0d;
+
+  --tag-bg-info-mild: #f0f5ff;
+  --tag-text-info: #2864ff;
+  --tag-bg-positive-mild: #ecfff7;
+  --tag-text-positive: #16a86c;
+  --tag-bg-critical-mild: #ffefef;
+  --tag-text-critical: #ea231a;
+  --tag-bg-medium-mild: #fdf8d9;
+  --tag-text-medium: #9a6c00;
+  --tag-bg-high-mild: #fff1e1;
+  --tag-text-high: #c75a00;
+  --tag-bg-neutral-mild: #f5f6fa;
+  --tag-text-neutral: #5d5f6b;
+  --tag-bg-smart-mild: #effcff;
+  --tag-text-smart: #00a6c1;
+
+  --badge-bg-blue: #cadcff;
+  --badge-text-blue: #0c2352;
+  --badge-bg-green: #92f6cd;
+  --badge-text-green: #002520;
+  --badge-bg-red: #ffadb0;
+  --badge-text-red: #46120e;
+  --badge-bg-yellow: #fee87c;
+  --badge-text-yellow: #322800;
+  --badge-bg-orange: #ffca9e;
+  --badge-text-orange: #3c1d04;
+  --badge-bg-teal: #b7ebf6;
+  --badge-text-teal: #002d3c;
+  --badge-bg-neutral: #dddee5;
+  --badge-text-neutral: #383a42;
+
+  --viz-positive: #29ca88;
+  --viz-critical: #ff7070;
+  --viz-medium: #fdd711;
+  --viz-high: #ffa052;
+  --viz-info: #98bffe;
+  --viz-neutral: #cbcdd6;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-special: 36px;
+  --font-size-h1: 28px;
+  --font-size-h2: 24px;
+  --font-size-h3: 20px;
+  --font-size-h4: 16px;
+  --font-size-body0: 16px;
+  --font-size-body1: 14px;
+  --font-size-body2: 12px;
+  --font-size-body3: 10px;
+  --line-height-base: 1.5;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Switch — components-library vuetify theme (Notification center) */
+  --royal-3: #cadcff;
+  --royal-5: #6393fd;
+  --switch-bg-off-idle: #cbcdd6;
+  --switch-knob-off-idle: #ffffff;
+  --switch-bg-on-idle: #6393fd;
+  --switch-knob-on-idle: #ffffff;
+  --switch-bg-off-disabled: #dddee5;
+  --switch-knob-off-disabled: #ffffff;
+  --switch-bg-on-disabled: #cadcff;
+  --switch-knob-on-disabled: #ffffff;
+
+  /* Applied filter chips — Notification center */
+  --filter-chip-bg: #ffffff;
+  --filter-chip-border: #dddee5;
+
+  --shadow-md: 0 4px 6px -1px rgba(9, 10, 11, 0.07), 0 2px 4px -2px rgba(9, 10, 11, 0.07);
+}

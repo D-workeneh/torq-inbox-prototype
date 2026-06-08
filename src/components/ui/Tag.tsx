@@ -3,175 +3,219 @@
 import React from 'react';
 import { X, AlertOctagon, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/** Torq Tag sentiment — COMPONENTS_INVENTORY.md */
+export type TagSentiment =
+  | 'info'
+  | 'positive'
+  | 'critical'
+  | 'high'
+  | 'medium'
+  | 'neutral'
+  | 'smart';
 
+export type TagProminence = 'mild' | 'strong';
+
+export type TagSize = 'small' | 'medium' | 'large';
+
+/** @deprecated Prefer TagSentiment */
 export type TagColor =
-  | 'neutral'   // Grey — Low severity / default
-  | 'primary'   // Blue — Info / brand
-  | 'success'   // Teal — positive, active, approved
-  | 'yellow'    // Yellow — Medium severity
-  | 'warning'   // Orange — High severity / caution
-  | 'error'     // Red — error, failed
-  | 'critical'  // Red bold — Critical severity
-  | 'info'      // Blue (primary) — informational
-  | 'purple';   // Purple — AI / special
+  | 'neutral'
+  | 'primary'
+  | 'success'
+  | 'yellow'
+  | 'warning'
+  | 'error'
+  | 'critical'
+  | 'info'
+  | 'purple';
 
-export type TagAppearance =
-  | 'subtle'    // Light tinted background, no border (default)
-  | 'bordered'  // Border + light tinted background
-  | 'surface';  // Neutral grey surface, no color (for workspace chips, etc.)
+/** @deprecated Prefer TagProminence */
+export type TagAppearance = 'subtle' | 'bordered' | 'surface';
 
-export type TagSize = 'sm' | 'md';
+/** @deprecated Use small | medium | large */
+export type LegacyTagSize = 'sm' | 'md';
+
+type SentimentTokens = { bg: string; text: string; border: string; dot: string };
+
+const SENTIMENT_MILD: Record<TagSentiment, SentimentTokens> = {
+  info: {
+    bg: 'var(--tag-bg-info-mild)',
+    text: 'var(--tag-text-info)',
+    border: 'var(--tag-text-info)',
+    dot: 'var(--tag-text-info)',
+  },
+  positive: {
+    bg: 'var(--tag-bg-positive-mild)',
+    text: 'var(--tag-text-positive)',
+    border: 'var(--tag-text-positive)',
+    dot: 'var(--tag-text-positive)',
+  },
+  critical: {
+    bg: 'var(--tag-bg-critical-mild)',
+    text: 'var(--tag-text-critical)',
+    border: 'var(--tag-text-critical)',
+    dot: 'var(--tag-text-critical)',
+  },
+  high: {
+    bg: 'var(--tag-bg-high-mild)',
+    text: 'var(--tag-text-high)',
+    border: 'var(--tag-text-high)',
+    dot: 'var(--tag-text-high)',
+  },
+  medium: {
+    bg: 'var(--tag-bg-medium-mild)',
+    text: 'var(--tag-text-medium)',
+    border: 'var(--tag-text-medium)',
+    dot: 'var(--tag-text-medium)',
+  },
+  neutral: {
+    bg: 'var(--tag-bg-neutral-mild)',
+    text: 'var(--tag-text-neutral)',
+    border: 'var(--border-level-3)',
+    dot: 'var(--tag-text-neutral)',
+  },
+  smart: {
+    bg: 'var(--tag-bg-smart-mild)',
+    text: 'var(--tag-text-smart)',
+    border: 'var(--tag-text-smart)',
+    dot: 'var(--tag-text-smart)',
+  },
+};
+
+const SENTIMENT_STRONG: Record<TagSentiment, SentimentTokens> = {
+  info: { bg: 'var(--badge-bg-blue)', text: 'var(--badge-text-blue)', border: 'var(--badge-text-blue)', dot: 'var(--badge-text-blue)' },
+  positive: { bg: 'var(--badge-bg-green)', text: 'var(--badge-text-green)', border: 'var(--badge-text-green)', dot: 'var(--badge-text-green)' },
+  critical: { bg: 'var(--badge-bg-red)', text: 'var(--badge-text-red)', border: 'var(--badge-text-red)', dot: 'var(--badge-text-red)' },
+  high: { bg: 'var(--badge-bg-orange)', text: 'var(--badge-text-orange)', border: 'var(--badge-text-orange)', dot: 'var(--badge-text-orange)' },
+  medium: { bg: 'var(--badge-bg-yellow)', text: 'var(--badge-text-yellow)', border: 'var(--badge-text-yellow)', dot: 'var(--badge-text-yellow)' },
+  neutral: { bg: 'var(--badge-bg-neutral)', text: 'var(--badge-text-neutral)', border: 'var(--badge-text-neutral)', dot: 'var(--badge-text-neutral)' },
+  smart: { bg: 'var(--badge-bg-teal)', text: 'var(--badge-text-teal)', border: 'var(--badge-text-teal)', dot: 'var(--badge-text-teal)' },
+};
+
+const COLOR_TO_SENTIMENT: Record<TagColor, TagSentiment> = {
+  neutral: 'neutral',
+  primary: 'info',
+  info: 'info',
+  success: 'positive',
+  warning: 'high',
+  yellow: 'medium',
+  error: 'critical',
+  critical: 'critical',
+  purple: 'smart',
+};
+
+function normalizeSize(size: TagSize | LegacyTagSize = 'small'): TagSize {
+  if (size === 'sm') return 'small';
+  if (size === 'md') return 'medium';
+  return size;
+}
+
+function resolveSentiment(
+  sentiment?: TagSentiment,
+  color?: TagColor,
+): TagSentiment {
+  if (sentiment) return sentiment;
+  if (color) return COLOR_TO_SENTIMENT[color];
+  return 'neutral';
+}
+
+function resolveProminence(
+  prominence?: TagProminence,
+  appearance?: TagAppearance,
+): TagProminence {
+  if (prominence) return prominence;
+  if (appearance === 'bordered') return 'mild';
+  return 'mild';
+}
+
+const SIZE_CLASSES: Record<TagSize, { wrap: string; icon: string; dot: string; remove: string }> = {
+  small: {
+    wrap: 'h-4 px-1.5 gap-1 rounded-[var(--radius-full)] text-[length:var(--font-size-body3)] font-medium',
+    icon: 'h-2.5 w-2.5 shrink-0',
+    dot: 'h-1.5 w-1.5 shrink-0 rounded-full',
+    remove: 'h-2.5 w-2.5 ml-0.5 opacity-70 hover:opacity-100 shrink-0',
+  },
+  medium: {
+    wrap: 'h-6 px-2 gap-1 rounded-[var(--radius-full)] text-[length:var(--font-size-body2)] font-medium',
+    icon: 'h-3 w-3 shrink-0',
+    dot: 'h-2 w-2 shrink-0 rounded-full',
+    remove: 'h-3 w-3 ml-0.5 opacity-70 hover:opacity-100 shrink-0',
+  },
+  large: {
+    wrap: 'h-7 px-2.5 gap-1.5 rounded-[var(--radius-full)] text-[length:var(--font-size-body1)] font-medium',
+    icon: 'h-3.5 w-3.5 shrink-0',
+    dot: 'h-2 w-2 shrink-0 rounded-full',
+    remove: 'h-3.5 w-3.5 ml-0.5 opacity-70 hover:opacity-100 shrink-0',
+  },
+};
 
 export interface TagProps {
+  sentiment?: TagSentiment;
+  prominence?: TagProminence;
+  /** @deprecated Use sentiment */
   color?: TagColor;
+  /** @deprecated Use prominence; `surface` maps to neutral surface styling */
   appearance?: TagAppearance;
-  size?: TagSize;
-  /** Icon rendered before the label (pass a Lucide icon element) */
+  size?: TagSize | LegacyTagSize;
   icon?: React.ReactNode;
-  /** Show a small colored dot before the label (alternative to icon) */
   dot?: boolean;
-  /** Makes the tag removable — renders an × button */
   onRemove?: () => void;
   className?: string;
   children: React.ReactNode;
 }
 
-// ─── Color token map ──────────────────────────────────────────────────────────
-
-type ColorTokens = {
-  text: string;
-  bg: string;
-  border: string;
-  dot: string;
-};
-
-const COLOR_TOKENS: Record<TagColor, ColorTokens> = {
-  neutral: {
-    text: 'var(--color-text-secondary)',
-    bg: 'var(--color-neutral-100)',
-    border: 'var(--color-border-2)',
-    dot: 'var(--color-neutral-400)',
-  },
-  primary: {
-    text: 'var(--color-primary-500)',
-    bg: 'var(--color-primary-100)',
-    border: 'var(--color-primary-300)',
-    dot: 'var(--color-primary-500)',
-  },
-  success: {
-    text: 'var(--color-teal-500)',
-    bg: 'var(--color-teal-50)',
-    border: 'var(--color-teal-300)',
-    dot: 'var(--color-teal-500)',
-  },
-  warning: {
-    text: 'var(--color-orange-500)',
-    bg: 'var(--color-orange-50)',
-    border: 'var(--color-orange-300)',
-    dot: 'var(--color-orange-500)',
-  },
-  yellow: {
-    text: 'var(--color-yellow-800)',
-    bg: 'var(--color-yellow-50)',
-    border: 'var(--color-yellow-300)',
-    dot: 'var(--color-yellow-700)',
-  },
-  error: {
-    text: 'var(--color-red-500)',
-    bg: 'var(--color-red-50)',
-    border: 'var(--color-red-300)',
-    dot: 'var(--color-red-500)',
-  },
-  critical: {
-    text: 'var(--color-red-500)',
-    bg: 'var(--color-red-50)',
-    border: 'var(--color-red-300)',
-    dot: 'var(--color-red-500)',
-  },
-  info: {
-    text: 'var(--color-primary-500)',
-    bg: 'var(--color-primary-50)',
-    border: 'var(--color-primary-300)',
-    dot: 'var(--color-primary-500)',
-  },
-  purple: {
-    text: 'var(--color-purple-500)',
-    bg: 'var(--color-purple-50)',
-    border: 'var(--color-purple-300)',
-    dot: 'var(--color-purple-500)',
-  },
-};
-
-const SIZE_CLASSES: Record<TagSize, { wrap: string; icon: string; dot: string; remove: string }> = {
-  sm: {
-    wrap: 'px-1.5 py-0.5 gap-1 rounded-[var(--radius-sm)] text-[var(--font-size-xs)] font-medium',
-    icon: 'h-2.5 w-2.5 shrink-0',
-    dot: 'h-1.5 w-1.5 shrink-0 rounded-full',
-    remove: 'h-2.5 w-2.5 ml-0.5 opacity-60 hover:opacity-100 shrink-0',
-  },
-  md: {
-    wrap: 'px-2 py-0.5 gap-1.5 rounded-[var(--radius-sm)] text-[var(--font-size-sm)] font-medium',
-    icon: 'h-3 w-3 shrink-0',
-    dot: 'h-2 w-2 shrink-0 rounded-full',
-    remove: 'h-3 w-3 ml-0.5 opacity-60 hover:opacity-100 shrink-0',
-  },
-};
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
 /**
- * Torq Design System — Tag / Badge / Chip
- *
- * Source: Figma "Design-system-next-gen" node 13372-1092
- *
- * @example
- * <Tag color="error" appearance="bordered" icon={<AlertOctagon />}>Critical</Tag>
- * <Tag color="success">Active</Tag>
- * <Tag color="neutral" appearance="surface" icon={<Building2 />}>Acme Corp</Tag>
- * <Tag color="primary" onRemove={() => {}}>Workflow Failed</Tag>
+ * Torq Design System — Tag (React port of components-library Tag / design-system TChip)
  */
 export function Tag({
-  color = 'neutral',
+  sentiment,
+  prominence,
+  color,
   appearance = 'subtle',
-  size = 'sm',
+  size = 'small',
   icon,
   dot,
   onRemove,
   className = '',
   children,
 }: TagProps) {
-  const tokens = COLOR_TOKENS[color];
-  const sz = SIZE_CLASSES[size];
-
-  // Surface appearance ignores color tokens — always grey
+  const resolvedSentiment = resolveSentiment(sentiment, color);
+  const resolvedProminence = resolveProminence(prominence, appearance);
+  const resolvedSize = normalizeSize(size);
   const isSurface = appearance === 'surface';
+  const showBorder = appearance === 'bordered';
 
-  const bg = isSurface ? 'var(--color-surface-tertiary)' : tokens.bg;
-  const textColor = isSurface ? 'var(--color-text-tertiary)' : tokens.text;
-  const borderColor = appearance === 'bordered' ? tokens.border : 'transparent';
+  const tokenMap = resolvedProminence === 'strong' ? SENTIMENT_STRONG : SENTIMENT_MILD;
+  const tokens = tokenMap[resolvedSentiment];
+  const sz = SIZE_CLASSES[resolvedSize];
+
+  const bg = isSurface ? 'var(--bg-static-3)' : tokens.bg;
+  const textColor = isSurface ? 'var(--text-tertiary)' : tokens.text;
+  const borderColor = showBorder
+    ? `color-mix(in srgb, ${tokens.border} 35%, transparent)`
+    : 'transparent';
 
   return (
     <span
-      className={`inline-flex items-center ${sz.wrap} ${className}`}
+      className={`inline-flex items-center font-[family-name:var(--font-family)] leading-none ${sz.wrap} ${className}`}
       style={{
         backgroundColor: bg,
         color: textColor,
         border: `1px solid ${borderColor}`,
       }}
     >
-      {dot && !icon && (
-        <span className={sz.dot} style={{ backgroundColor: tokens.dot }} />
-      )}
-      {icon && (
-        <span className={`flex items-center ${sz.icon}`}>{icon}</span>
-      )}
-      <span className="leading-none">{children}</span>
+      {dot && !icon && <span className={sz.dot} style={{ backgroundColor: tokens.dot }} />}
+      {icon && <span className={`flex items-center ${sz.icon}`}>{icon}</span>}
+      <span>{children}</span>
       {onRemove && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className={`flex items-center transition-opacity ${sz.remove}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className={`flex items-center transition-opacity bg-transparent border-0 p-0 cursor-pointer ${sz.remove}`}
+          style={{ color: 'inherit' }}
           aria-label="Remove"
         >
           <X className="h-full w-full" />
@@ -181,52 +225,55 @@ export function Tag({
   );
 }
 
-// ─── SeverityTag ──────────────────────────────────────────────────────────────
-// Convenience component — maps a severity level to the correct color + icon.
-// Source: Figma "Notification-center" node 5328-57298
-//
-// Usage:
-//   <SeverityTag level="critical" />   → red  + AlertOctagon
-//   <SeverityTag level="high" />       → orange + AlertTriangle
-//   <SeverityTag level="medium" />     → yellow + AlertCircle
-//   <SeverityTag level="low" />        → grey  + Info
-//   <SeverityTag level="info" />       → blue  + Info
-
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
-type SeverityPreset = { color: TagColor; Icon: React.ElementType; label: string };
-
-const SEVERITY_PRESETS: Record<SeverityLevel, SeverityPreset> = {
-  critical: { color: 'critical', Icon: AlertOctagon,  label: 'Critical' },
-  high:     { color: 'warning',  Icon: AlertTriangle, label: 'High'     },
-  medium:   { color: 'yellow',   Icon: AlertCircle,   label: 'Medium'   },
-  low:      { color: 'neutral',  Icon: Info,          label: 'Low'      },
-  info:     { color: 'info',     Icon: Info,          label: 'Info'     },
+const SEVERITY_PRESETS: Record<
+  SeverityLevel,
+  { sentiment: TagSentiment; Icon: React.ElementType; label: string }
+> = {
+  critical: { sentiment: 'critical', Icon: AlertOctagon, label: 'Critical' },
+  high: { sentiment: 'high', Icon: AlertTriangle, label: 'High' },
+  medium: { sentiment: 'medium', Icon: AlertCircle, label: 'Medium' },
+  low: { sentiment: 'neutral', Icon: Info, label: 'Low' },
+  info: { sentiment: 'info', Icon: Info, label: 'Info' },
 };
 
 export interface SeverityTagProps {
   level: SeverityLevel;
-  size?: TagSize;
-  /** 'subtle' (default) — light tinted background, no border, matches Figma design system */
+  size?: TagSize | LegacyTagSize;
+  prominence?: TagProminence;
+  /** @deprecated Use prominence */
   appearance?: TagAppearance;
   onRemove?: () => void;
 }
 
-/**
- * Torq Design System — SeverityTag
- *
- * Source: Figma "Notification-center" node 5328-57298
- *
- * @example
- * <SeverityTag level="critical" />
- * <SeverityTag level="high" size="md" />
- * <SeverityTag level="medium" onRemove={() => {}} />
- */
-export function SeverityTag({ level, size = 'sm', appearance = 'subtle', onRemove }: SeverityTagProps) {
-  const { color, Icon, label } = SEVERITY_PRESETS[level];
+export function SeverityTag({
+  level,
+  size = 'small',
+  prominence = 'mild',
+  appearance,
+  onRemove,
+}: SeverityTagProps) {
+  const { sentiment, Icon, label } = SEVERITY_PRESETS[level];
   return (
-    <Tag color={color} appearance={appearance} size={size} icon={<Icon />} onRemove={onRemove}>
+    <Tag
+      sentiment={sentiment}
+      prominence={prominence}
+      appearance={appearance}
+      size={size}
+      icon={<Icon />}
+      onRemove={onRemove}
+    >
       {label}
     </Tag>
   );
 }
+
+/** Re-export sentiment colors for filter UI icon tinting */
+export const SEVERITY_VIZ_COLORS: Record<SeverityLevel, string> = {
+  critical: 'var(--viz-critical)',
+  high: 'var(--viz-high)',
+  medium: 'var(--viz-medium)',
+  low: 'var(--viz-neutral)',
+  info: 'var(--viz-info)',
+};
