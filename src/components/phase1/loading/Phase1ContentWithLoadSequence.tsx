@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Phase1ContentArea } from '../Phase1ContentArea';
+import type { WorkspaceSettingsTab } from '../Phase1WorkspaceSettingsView';
 import { Phase1PageSkeleton, resolvePhase1SkeletonVariant } from './Phase1PageSkeleton';
 import { TorqPixelLoader } from './TorqPixelLoader';
 import type { SimulatedLoadProfile } from './simulatedLoadTiming';
@@ -12,27 +13,56 @@ export function Phase1ContentWithLoadSequence({
   pageId,
   caseKey,
   workflowName,
+  integrationName,
   workspaceId,
   workspaceName,
   loadProfile = 'default',
   onCloseCase,
   onNavigateCase,
+  onIntegrationBack,
+  onOpenIntegration,
+  settingsTab = 'general',
 }: {
   pageId: string;
   caseKey: string | null;
   workflowName?: string | null;
+  integrationName?: string | null;
   workspaceId?: string;
   workspaceName?: string;
   loadProfile?: SimulatedLoadProfile;
   onCloseCase: () => void;
   onNavigateCase?: (caseKey: string) => void;
+  onIntegrationBack?: () => void;
+  onOpenIntegration?: (integrationName: string) => void;
+  settingsTab?: WorkspaceSettingsTab;
 }) {
-  const loadKey = `${workspaceId ?? workspaceName ?? ''}|${pageId}|${caseKey ?? ''}|${workflowName ?? ''}`;
-  const loadPhase = useSimulatedPageLoad(loadKey, loadProfile);
+  if (pageId === 'settings') {
+    return (
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+        <Phase1ContentArea
+          pageId={pageId}
+          caseKey={caseKey}
+          workflowName={workflowName}
+          integrationName={integrationName}
+          workspaceName={workspaceName}
+          onCloseCase={onCloseCase}
+          onNavigateCase={onNavigateCase}
+          onIntegrationBack={onIntegrationBack}
+          onOpenIntegration={onOpenIntegration}
+          settingsTab={settingsTab}
+        />
+      </div>
+    );
+  }
+
+  const loadKey = `${workspaceId ?? workspaceName ?? ''}|${pageId}|${caseKey ?? ''}|${workflowName ?? ''}|${integrationName ?? ''}`;
+  const resolvedLoadProfile =
+    loadProfile ?? (pageId === 'cases' ? 'cases' : 'default');
+  const loadPhase = useSimulatedPageLoad(loadKey, resolvedLoadProfile);
 
   const skeletonVariant = useMemo(
-    () => resolvePhase1SkeletonVariant(pageId, caseKey, workflowName ?? null),
-    [pageId, caseKey, workflowName],
+    () => resolvePhase1SkeletonVariant(pageId, caseKey, workflowName ?? null, integrationName ?? null),
+    [pageId, caseKey, workflowName, integrationName],
   );
 
   return (
@@ -76,9 +106,12 @@ export function Phase1ContentWithLoadSequence({
             pageId={pageId}
             caseKey={caseKey}
             workflowName={workflowName}
+            integrationName={integrationName}
             workspaceName={workspaceName}
             onCloseCase={onCloseCase}
             onNavigateCase={onNavigateCase}
+            onIntegrationBack={onIntegrationBack}
+            onOpenIntegration={onOpenIntegration}
           />
         </motion.div>
       )}

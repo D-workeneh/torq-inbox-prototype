@@ -8,7 +8,8 @@ export type PrototypePhase =
   | 'floating-drawer'
   | 'floating-drawer-preview'
   | 'floating-drawer-action'
-  | 'floating-drawer-read-more';
+  | 'floating-drawer-read-more'
+  | 'notification-builtin-action';
 
 export const PROTOTYPE_PHASE_STORAGE_KEY = 'torq-prototype-phase';
 
@@ -33,6 +34,11 @@ const PHASE_OPTIONS: {
     label: 'Floating drawer',
     subtitle: 'Drawer + Read more',
   },
+  {
+    id: 'notification-builtin-action',
+    label: 'Notification',
+    subtitle: 'Notification + Action (built in)',
+  },
 ];
 
 const FAB_BORDER = '#E5E5E5';
@@ -47,7 +53,8 @@ export function loadPrototypePhase(): PrototypePhase {
       stored === 'floating-drawer' ||
       stored === 'floating-drawer-preview' ||
       stored === 'floating-drawer-action' ||
-      stored === 'floating-drawer-read-more'
+      stored === 'floating-drawer-read-more' ||
+      stored === 'notification-builtin-action'
     ) {
       return stored;
     }

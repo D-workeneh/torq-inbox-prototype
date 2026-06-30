@@ -9,8 +9,8 @@ function segments(...parts: Phase1TitleSegment[]): Phase1TitleSegment[] {
 }
 
 /**
- * Notification title typography — bold primary entities, regular connector phrases.
- * Matches Notification center / Notion-style hierarchy (e.g. "AI credit limit" + "exceeded").
+ * Notification title typography — bold primary entities and key metrics, regular connectors.
+ * AI credit rows: bold "AI credit" and the usage %; keep "exceeded at", "usage", etc. regular.
  */
 export function parsePhase1NotifTitle(title: string): Phase1TitleSegment[] {
   const mention = title.match(/^(.+?)\s+(mentioned you in)\s+(.+)$/i);
@@ -50,6 +50,23 @@ export function parsePhase1NotifTitle(title: string): Phase1TitleSegment[] {
   const publish = title.match(/^(.+?)\s+(requested to publish)\s+(.+)$/i);
   if (publish) {
     return segments(seg(publish[1], true), seg(` ${publish[2]} `, false), seg(publish[3], true));
+  }
+
+  const pendingPublish = title.match(/^(.+?)\s+(is pending publish approval)$/i);
+  if (pendingPublish) {
+    return segments(
+      seg(pendingPublish[1], true),
+      seg(` ${pendingPublish[2]}`, false),
+    );
+  }
+
+  const workflowRunFailed = title.match(/^Workflow run failed in\s+(.+)$/i);
+  if (workflowRunFailed) {
+    const name = workflowRunFailed[1].replace(/^['"]|['"]$/g, '');
+    return segments(
+      seg('Workflow run failed in ', false),
+      seg(`'${name}'`, true),
+    );
   }
 
   const shareWithYou = title.match(/^(.+?)\s+(shared)\s+(.+?)\s+(with you)$/i);
@@ -104,6 +121,15 @@ export function parsePhase1NotifTitle(title: string): Phase1TitleSegment[] {
     return segments(seg(exportReadyDownload[1], true), seg(` ${exportReadyDownload[2]}`, false));
   }
 
+  const exportSucceeded = title.match(/^(Case export succeeded)\s+—\s+(.+)$/i);
+  if (exportSucceeded) {
+    return segments(
+      seg(exportSucceeded[1], true),
+      seg(' — ', false),
+      seg(exportSucceeded[2], true),
+    );
+  }
+
   const assigned = title.match(/^(Case #\d+)\s+(assigned to you)\s+—\s+(.+)$/i);
   if (assigned) {
     return segments(
@@ -118,14 +144,59 @@ export function parsePhase1NotifTitle(title: string): Phase1TitleSegment[] {
     return segments(seg(exportReady[1], true), seg(' — ', false), seg(exportReady[2], true));
   }
 
-  const usageMonth = title.match(/^(AI credit usage)\s+(this month)$/i);
+  const usageMonth = title.match(/^(AI credit usage at)\s+(\d+%)\s+(this month)$/i);
   if (usageMonth) {
-    return segments(seg(usageMonth[1], true), seg(` ${usageMonth[2]}`, false));
+    return segments(
+      seg(`${usageMonth[1]} `, false),
+      seg(usageMonth[2], true),
+      seg(` ${usageMonth[3]}`, false),
+    );
   }
 
-  const atUsage = title.match(/^(.+?)\s+(at \d+% usage)$/i);
+  const exceededAt = title.match(/^(AI credit)\s+(exceeded at)\s+(\d+%)$/i);
+  if (exceededAt) {
+    return segments(
+      seg(exceededAt[1], true),
+      seg(` ${exceededAt[2]} `, false),
+      seg(exceededAt[3], true),
+    );
+  }
+
+  const aiAtUsage = title.match(/^(AI credit at)\s+(\d+%)\s+(usage)$/i);
+  if (aiAtUsage) {
+    return segments(
+      seg(`${aiAtUsage[1]} `, false),
+      seg(aiAtUsage[2], true),
+      seg(` ${aiAtUsage[3]}`, false),
+    );
+  }
+
+  const atUsage = title.match(/^(.+?)\s+(at)\s+(\d+%)\s+(usage)$/i);
   if (atUsage) {
-    return segments(seg(atUsage[1], true), seg(` ${atUsage[2]}`, false));
+    return segments(
+      seg(atUsage[1], true),
+      seg(` ${atUsage[2]} `, false),
+      seg(atUsage[3], true),
+      seg(` ${atUsage[4]}`, false),
+    );
+  }
+
+  const integrationShared = title.match(/^(.+?)\s+(integration was shared with)\s+(.+)$/i);
+  if (integrationShared) {
+    return segments(
+      seg(integrationShared[1], true),
+      seg(` ${integrationShared[2]} `, false),
+      seg(integrationShared[3], true),
+    );
+  }
+
+  const stepShared = title.match(/^(.+?)\s+(step was shared with)\s+(.+)$/i);
+  if (stepShared) {
+    return segments(
+      seg(stepShared[1], true),
+      seg(` ${stepShared[2]} `, false),
+      seg(stepShared[3], true),
+    );
   }
 
   const dashIdx = title.indexOf(' — ');
@@ -135,6 +206,14 @@ export function parsePhase1NotifTitle(title: string): Phase1TitleSegment[] {
     const leftFailure = left.match(
       /^(.+)\s+(execution failed|share failed|export failed|failed|blocked|exceeded)$/i,
     );
+    const dataExportFailed = left.match(/^(Data export)\s+(failed)$/i);
+    if (dataExportFailed) {
+      return segments(
+        seg(dataExportFailed[1], true),
+        seg(` ${dataExportFailed[2]} — `, false),
+        seg(right, true),
+      );
+    }
     if (leftFailure) {
       return segments(
         seg(leftFailure[1], true),

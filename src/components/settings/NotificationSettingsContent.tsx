@@ -1,37 +1,40 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { Select } from '@/components/ui/Select';
-import { Toggle } from '@/components/ui/Toggle';
 import {
   SettingsBlockTitle,
   SettingsCard,
-  SettingsCardBody,
-  SettingsCardRow,
-  SettingsEyebrow,
 } from './SettingsPrimitives';
 import {
   ALL_NOTIF_TOPIC_IDS,
   NOTIFICATION_MVP_GROUPS,
   NOTIF_SETTINGS_SAVED_EVENT,
-  THROTTLE_OPTIONS,
-  buildDefaultNotifChannels,
   getInitialNotificationSettingsState,
+  getWorkspaceSavedState,
+  loadSavedNotificationSettings,
   saveNotificationSettings,
   type ChannelKey,
   type NotifChannelState,
   type NotifTopicId,
   type SavedNotificationSettings,
-  type ThrottleInterval,
 } from '@/lib/notificationSettingsStorage';
+import { NOTIF_TABLE_BORDER_CLASS, NOTIF_TABLE_OUTER_BORDER_CLASS } from '@/lib/notificationPreferencesModalStorage';
+import {
+  ORG_NOTIF_SETTINGS_SAVED_EVENT,
+  getOrgNotificationSettingsState,
+  loadOrgNotificationSettings,
+  saveOrgNotificationSettings,
+  type SavedOrgNotificationSettings,
+} from '@/lib/orgNotificationSettingsStorage';
 
-/** Fixed channel columns so every checkbox shares the same horizontal position */
 const CHANNEL_GRID = 'grid grid-cols-[minmax(0,1fr)_80px_80px] items-center';
+
+type SettingsTab = 'my-preferences' | 'workspace-policy';
+
+export type NotificationSettingsScope = 'workspace' | 'organization';
 
 function ChannelCheckboxCell({ children }: { children: React.ReactNode }) {
   return (
@@ -60,34 +63,134 @@ function ChannelHeaderCell({
   );
 }
 
-export function NotificationSettingsContent() {
-  const init = getInitialNotificationSettingsState();
-  const [criticalBypass, setCriticalBypass] = useState(init.criticalBypass);
-  const [throttleInterval, setThrottleInterval] = useState<ThrottleInterval>(init.throttleInterval);
-  const [channels, setChannels] = useState<NotifChannelState>(() => init.channels);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+function SettingsTabs({
+  active,
+  onChange,
+}: {
+  active: SettingsTab;
+  onChange: (tab: SettingsTab) => void;
+}) {
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'my-preferences', label: 'My preferences' },
+    { id: 'workspace-policy', label: 'Workspace policy' },
+  ];
 
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
-  }, []);
+  return (
+    <div className="-mt-1 mb-8 flex gap-8 border-b border-[var(--border-level-1)]">
+      {tabs.map((tab) => {
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`relative -mb-px pb-3 text-[length:var(--font-size-body1)] transition-colors ${
+              isActive
+                ? 'font-semibold text-[var(--text-primary)]'
+                : 'font-normal text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            {tab.label}
+            {isActive && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--text-primary)]" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  function showToast(message: string) {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToastMsg(message);
-    toastTimerRef.current = setTimeout(() => {
-      setToastMsg(null);
-      toastTimerRef.current = null;
-    }, 2800);
+export function NotificationSettingsContent({
+  scope = 'workspace',
+}: {
+  scope?: NotificationSettingsScope;
+}) {
+  const isOrg = scope === 'organization';
+  const effective = getInitialNotificationSettingsState();
+  const orgState = getOrgNotificationSettingsState();
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>('my-preferences');
+  const [channels, setChannels] = useState<NotifChannelState>(() =>
+    isOrg ? orgState.channels : effective.channels,
+  );
+
+  const showTabs = !isOrg;
+  const isMyPreferences = showTabs && activeTab === 'my-preferences';
+
+  function syncChannelsFromStorage() {
+    if (isOrg) {
+      setChannels(getOrgNotificationSettingsState().channels);
+      return;
+    }
+    setChannels(getWorkspaceSavedState().channels);
   }
 
-  function persistAndBroadcast(payload: SavedNotificationSettings) {
-    saveNotificationSettings(payload);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(NOTIF_SETTINGS_SAVED_EVENT));
+  useEffect(() => {
+    function refreshFromStorage() {
+      syncChannelsFromStorage();
     }
+
+    window.addEventListener(NOTIF_SETTINGS_SAVED_EVENT, refreshFromStorage);
+    window.addEventListener(ORG_NOTIF_SETTINGS_SAVED_EVENT, refreshFromStorage);
+    return () => {
+      window.removeEventListener(NOTIF_SETTINGS_SAVED_EVENT, refreshFromStorage);
+      window.removeEventListener(ORG_NOTIF_SETTINGS_SAVED_EVENT, refreshFromStorage);
+    };
+  }, [isOrg]);
+
+  useEffect(() => {
+    if (isOrg) return;
+    syncChannelsFromStorage();
+  }, [activeTab, isOrg]);
+
+  function persistWorkspace(payload: SavedNotificationSettings) {
+    saveNotificationSettings(payload);
+    window.dispatchEvent(new CustomEvent(NOTIF_SETTINGS_SAVED_EVENT));
+  }
+
+  function persistOrg(payload: SavedOrgNotificationSettings) {
+    saveOrgNotificationSettings(payload);
+  }
+
+  function workspaceSmartGroupingSnapshot() {
+    const ws = getWorkspaceSavedState();
+    const existing = loadSavedNotificationSettings();
+    return {
+      smartGroupingOccurrences: ws.smartGroupingOccurrences,
+      smartGroupingWindow: ws.smartGroupingWindow,
+      smartGroupingLocked: ws.smartGroupingLocked,
+      userSmartGroupingOccurrences:
+        existing?.userSmartGroupingOccurrences ?? ws.userSmartGroupingOccurrences,
+      userSmartGroupingWindow: existing?.userSmartGroupingWindow ?? ws.userSmartGroupingWindow,
+    };
+  }
+
+  function orgSmartGroupingSnapshot() {
+    const org = getOrgNotificationSettingsState();
+    return {
+      smartGroupingLocked: org.smartGroupingLocked,
+      smartGroupingOccurrences: org.smartGroupingOccurrences,
+      smartGroupingWindow: org.smartGroupingWindow,
+    };
+  }
+
+  function persistChannels(next: NotifChannelState) {
+    if (isOrg) {
+      persistOrg({
+        version: 1,
+        enforced: loadOrgNotificationSettings()?.enforced ?? true,
+        ...orgSmartGroupingSnapshot(),
+        channels: next,
+      });
+      return;
+    }
+
+    persistWorkspace({
+      version: 1,
+      ...workspaceSmartGroupingSnapshot(),
+      channels: next,
+    });
   }
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
@@ -110,7 +213,11 @@ export function NotificationSettingsContent() {
     const meta = itemMeta(topic);
     if (ch === 'inapp' && meta?.disableInApp) return;
     if (ch === 'email' && meta?.disableEmail) return;
-    setChannels((prev) => ({ ...prev, [topic]: { ...prev[topic], [ch]: !prev[topic][ch] } }));
+    setChannels((prev) => {
+      const next = { ...prev, [topic]: { ...prev[topic], [ch]: !prev[topic][ch] } };
+      persistChannels(next);
+      return next;
+    });
   }
 
   function toggleGroupExpanded(groupId: string) {
@@ -144,6 +251,7 @@ export function NotificationSettingsContent() {
         if (ch === 'email' && m?.disableEmail) return;
         next[id] = { ...next[id], [ch]: value };
       });
+      persistChannels(next);
       return next;
     });
   }
@@ -158,6 +266,7 @@ export function NotificationSettingsContent() {
         if (ch === 'email' && item.disableEmail) return;
         next[item.id] = { ...next[item.id], [ch]: value };
       });
+      persistChannels(next);
       return next;
     });
   }
@@ -184,73 +293,28 @@ export function NotificationSettingsContent() {
     return groupLeafStates(groupId, ch).some(Boolean);
   }
 
-  function restoreDefaults() {
-    const next = buildDefaultNotifChannels();
-    setCriticalBypass(true);
-    setThrottleInterval('10 min');
-    setChannels(next);
-    persistAndBroadcast({
-      version: 1,
-      criticalBypass: true,
-      throttleInterval: '10 min',
-      channels: next,
-    });
-    showToast('Restored to defaults');
-  }
-
-  function handleSaveChanges() {
-    persistAndBroadcast({
-      version: 1,
-      criticalBypass,
-      throttleInterval,
-      channels,
-    });
-    showToast('Settings saved');
-  }
+  const channelDescription = isOrg
+    ? 'Set default notification channels for all workspaces in your organization.'
+    : isMyPreferences
+      ? 'Choose how you want to be notified for workspace activity.'
+      : 'Set default notification channels for everyone in this workspace.';
 
   return (
-    <div className="space-y-8 w-full font-[family-name:var(--font-family)]">
-      <section>
-        <SettingsEyebrow>Noise control</SettingsEyebrow>
-        <SettingsCard>
-          <SettingsCardBody>
-            <SettingsCardRow
-              title="Critical severity bypass"
-              description="Always deliver critical alerts in real-time, ignoring throttling and quiet hours."
-              control={<Toggle on={criticalBypass} onChange={setCriticalBypass} />}
-            />
-            <SettingsCardRow
-              title="Alert throttling"
-              description={`Group repeated notifications from the same type that arrive within ${throttleInterval} into one notification. The grouped notification shows how many updates it contains.`}
-              control={
-                <Select
-                  value={throttleInterval}
-                  onChange={(e) => setThrottleInterval(e.target.value as ThrottleInterval)}
-                  size="small"
-                  className="min-w-[120px]"
-                  aria-label="Alert throttling interval"
-                >
-                  {THROTTLE_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </Select>
-              }
-            />
-          </SettingsCardBody>
-        </SettingsCard>
-      </section>
+    <div className="w-full space-y-8 font-[family-name:var(--font-family)]">
+      {isOrg && (
+        <div className="rounded-xl border border-[var(--color-primary-100)] bg-[var(--color-primary-50)] px-4 py-3 text-[length:var(--font-size-body2)] text-[var(--color-text-secondary)]">
+          Organization policies cascade to all workspaces and users. Workspace admins and individual users inherit these settings.
+        </div>
+      )}
+
+      {showTabs && <SettingsTabs active={activeTab} onChange={setActiveTab} />}
 
       <section>
-        <SettingsBlockTitle
-          title="Notification channels"
-          description="Choose how you want to be notified for workspace activity."
-        />
+        <SettingsBlockTitle title="Notification channels" description={channelDescription} />
 
-        <SettingsCard className="border-[var(--border-level-1)]">
+        <SettingsCard className={NOTIF_TABLE_OUTER_BORDER_CLASS}>
           <div
-            className={`${CHANNEL_GRID} border-b border-[var(--border-level-1)] bg-[var(--bg-static-2)] px-4 py-2.5`}
+            className={`${CHANNEL_GRID} border-b ${NOTIF_TABLE_BORDER_CLASS} bg-[var(--bg-static-2)] px-4 py-2.5`}
           >
             <span className="text-[length:var(--font-size-body2)] font-semibold text-[var(--text-tertiary)]">
               Notify me about
@@ -281,7 +345,7 @@ export function NotificationSettingsContent() {
             return (
               <div key={grp.id}>
                 <div
-                  className={`${CHANNEL_GRID} border-b border-[var(--border-level-1)] bg-[var(--bg-static-3)] px-4 py-2.5`}
+                  className={`${CHANNEL_GRID} border-b ${NOTIF_TABLE_BORDER_CLASS} bg-[var(--bg-static-3)] px-4 py-2.5`}
                 >
                   <button
                     type="button"
@@ -327,7 +391,7 @@ export function NotificationSettingsContent() {
                       {grp.items.map((item, ii) => (
                         <div
                           key={item.id}
-                          className={`${CHANNEL_GRID} border-b border-[var(--border-level-1)] px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[var(--bg-hover-level-1)] ${
+                          className={`${CHANNEL_GRID} border-b ${NOTIF_TABLE_BORDER_CLASS} px-4 py-3.5 transition-colors last:border-b-0 hover:bg-[var(--bg-hover-level-1)] ${
                             ii === grp.items.length - 1 && isLastGroup ? 'border-b-0' : ''
                           }`}
                         >
@@ -368,31 +432,7 @@ export function NotificationSettingsContent() {
             );
           })}
         </SettingsCard>
-
-        <div className="flex justify-end mt-4">
-          <Button theme="third" size="small" onClick={restoreDefaults}>
-            Restore to default
-          </Button>
-        </div>
       </section>
-
-      <div className="flex justify-end pt-2 pb-4">
-        <Button theme="primary" size="medium" onClick={handleSaveChanges}>
-          Save changes
-        </Button>
-      </div>
-
-      {toastMsg &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            role="status"
-            className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] px-4 py-2.5 text-[length:var(--font-size-body1)] font-medium text-[var(--text-primary)] shadow-[var(--shadow-md)]"
-          >
-            {toastMsg}
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

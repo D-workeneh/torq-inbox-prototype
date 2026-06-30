@@ -11,9 +11,37 @@ function agoMs(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
 }
 
+function localTodayAt(hour: number, minute: number): string {
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
+/** Most recent prior occurrence of a weekday (0=Sun … 6=Sat), for "This week" demo timestamps. */
+function localPriorWeekday(weekday: number, hour: number, minute: number): string {
+  const d = new Date();
+  const today = d.getDay();
+  let daysBack = (today - weekday + 7) % 7;
+  if (daysBack === 0) daysBack = 7;
+  d.setDate(d.getDate() - daysBack);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
+function onCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): string {
+  return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
+}
+
 const m = (n: number) => n * 60 * 1000;
 const h = (n: number) => n * 60 * 60 * 1000;
 const d = (n: number) => n * 24 * 60 * 60 * 1000;
+const s = (n: number) => n * 1000;
 
 const TORQ_DEV = 'torq-dev';
 const TORQ_STAGING = 'torq-staging';
@@ -36,6 +64,7 @@ const SUCCESS_BADGE = '#16A34A';
 
 const TOMER_AVATAR = { initials: 'T', color: TORQ_DEV_BLUE };
 const TZOFIA_AVATAR = { initials: 'T', color: TORQ_DEV_BLUE };
+const DAN_AVATAR = { initials: 'D', color: TORQ_DEV_BLUE };
 
 function aiCreditNotif(
   id: string,
@@ -73,13 +102,13 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     id: 'n1',
     zone: 'pinned',
     severity: 'critical',
-    title: 'Workflow execution failed — Malware triage endpoint',
-    body: 'Step "Enrich IP" failed · Step 4 of 9',
+    title: "Workflow run failed in 'Malware triage endpoint'",
+    body: 'Step "Extract IP" failed · Step 4 of 12',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: WORKFLOW_AVATAR_BG,
     badgeBg: FAIL_BADGE,
-    occurredAt: agoMs(m(3)),
+    occurredAt: agoMs(s(30)),
     avatarIcon: 'workflow',
     contentScreen: 'workflows',
     target: { type: 'workflow', workflowName: 'Malware triage endpoint' },
@@ -88,13 +117,13 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     id: 'n2',
     zone: 'feed',
     severity: 'high',
-    title: 'Workflow share failed — Phishing response v2',
-    body: 'Step "Send alert" failed · Step 2 of 6',
+    title: "Workflow run failed in 'Phishing response v2'",
+    body: 'Step "Extract IP" failed · Step 4 of 12',
     workspaceId: TORQ_STAGING,
     workspace: workspaceLabel(TORQ_STAGING),
     avatarBg: WORKFLOW_AVATAR_BG,
     badgeBg: FAIL_BADGE,
-    occurredAt: agoMs(h(28)),
+    occurredAt: localPriorWeekday(5, 16, 5),
     avatarIcon: 'workflow',
     contentScreen: 'workflows',
     target: { type: 'workflow', workflowName: 'Phishing response v2' },
@@ -103,55 +132,78 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     id: 'n3',
     zone: 'feed',
     severity: 'high',
-    title: 'Tomer Braunstain requested to publish Phishing auto-triage v3',
+    title: 'Phishing auto-triage v3 is pending publish approval',
     body: 'Awaiting your review · submitted 4 hr ago',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: WORKFLOW_AVATAR_BG,
     badgeBg: WARN_BADGE,
-    occurredAt: agoMs(m(35)),
+    occurredAt: agoMs(m(12)),
     avatarIcon: 'publish',
     contentScreen: 'workflows',
     target: { type: 'workflow', workflowName: 'Phishing auto-triage v3' },
     personAvatar: TOMER_AVATAR,
+    builtInActionSet: 'publish-approval',
   },
-  // AI Credits & Licensing (aligned with Usage tab + preview card)
-  aiCreditNotif('n4', TORQ_DEV, 'exceeded', {
-    zone: 'pinned',
-    occurredAt: agoMs(m(11)),
-  }),
-  aiCreditNotif('n6', TORQ_DEV, 'summary', {
-    occurredAt: agoMs(h(32)),
-  }),
+  // AI Credits & Licensing
+  {
+    ...aiCreditNotif('n4', TORQ_DEV, 'exceeded', {
+      zone: 'pinned',
+      occurredAt: agoMs(m(11)),
+    }),
+    title: 'AI credit exceeded at 102%',
+    body: '102,000 of 100,000 credits used. Upgrade your plan or contact support.',
+    aiCreditsSnapshot: { used: 102_000, limit: 100_000 },
+  },
+  {
+    ...aiCreditNotif('n5', TORQ_DEV, 'warning', {
+      occurredAt: agoMs(m(14)),
+    }),
+    title: 'AI credit at 80% usage',
+    body: '80,000 of 100,000 credits used. Upgrade your plan or contact support.',
+    aiCreditsSnapshot: { used: 80_000, limit: 100_000 },
+  },
+  {
+    ...aiCreditNotif('n6', TORQ_DEV, 'summary', {
+      occurredAt: agoMs(h(32)),
+    }),
+    title: 'AI credit usage at 80% this month',
+    body: '1,600 of 2,000 monthly credits used. Upgrade your plan or contact support.',
+    aiCreditsSnapshot: { used: 1_600, limit: 2_000 },
+  },
   // Case Management
   {
     id: 'n7',
     zone: 'feed',
     severity: 'high',
-    title: 'Tomer Braunstain mentioned you in Case #4380 — Ransomware alert',
-    body: '"Can you review this IOC?"',
+    title: 'Dan M. mentioned you in Case #4,380 — "Ransomware alert"',
+    body: '"Can you review the IOC?"',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: CASE_AVATAR_BG,
     badgeBg: WARN_BADGE,
-    occurredAt: agoMs(h(1)),
+    occurredAt: agoMs(h(2)),
     avatarIcon: 'mention',
     contentScreen: 'cases',
     target: { type: 'case', caseKey: '4380' },
-    personAvatar: TOMER_AVATAR,
+    personAvatar: DAN_AVATAR,
   },
   // Case Exports
   {
     id: 'n8',
     zone: 'feed',
     severity: 'high',
-    title: 'Case export failed — file too large',
+    title: 'Data export failed — file too large',
     body: 'Requested Jul 23, 2025 · Try again with less data',
+    bodyLearnMore: {
+      label: 'Learn more',
+      url: 'https://kb.torq.io/en/articles/13733023-workflow-template-export-observables-as-csv',
+    },
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: CASE_AVATAR_BG,
     badgeBg: FAIL_BADGE,
-    occurredAt: agoMs(h(3)),
+    occurredAt: localTodayAt(14, 23),
     avatarIcon: 'export',
     contentScreen: 'cases',
     target: { type: 'case', caseKey: '4350' },
@@ -166,7 +218,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     workspace: TORQ_DEV_LABEL,
     avatarBg: CASE_AVATAR_BG,
     badgeBg: FAIL_BADGE,
-    occurredAt: agoMs(d(3)),
+    occurredAt: localPriorWeekday(1, 9, 48),
     avatarIcon: 'export',
     contentScreen: 'cases',
     target: { type: 'case', caseKey: '4350' },
@@ -176,23 +228,24 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     zone: 'feed',
     severity: 'low',
     title: 'Case export failed — please try again',
-    body: 'Requested Jul 22, 2025 · Something went wrong on our end',
+    body: 'Requested Jul 23, 2025 · Something went wrong on our end',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: CASE_AVATAR_BG,
     badgeBg: NEUTRAL_BADGE,
-    occurredAt: agoMs(h(26)),
+    occurredAt: localPriorWeekday(3, 7, 54),
     avatarIcon: 'export',
     contentScreen: 'cases',
     target: { type: 'case', caseKey: '4350' },
+    builtInActionSet: 'export-retry',
   },
   // Sharing & Collaboration
   {
     id: 'n11',
     zone: 'feed',
     severity: 'high',
-    title: 'Tzofia Bar shared CrowdStrike connector with you',
-    body: 'From workspace: torq-internal · Integration',
+    title: 'CrowdStrike connector integration was shared with torq-dev',
+    body: 'Shared by Tzofia Bar from torq-internal · Review integration',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: TORQ_AVATAR_BG,
@@ -200,20 +253,21 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     occurredAt: agoMs(h(27)),
     avatarIcon: 'share',
     contentScreen: 'workflows',
-    target: { type: 'workflows' },
+    target: { type: 'integration', integrationName: 'CrowdStrike' },
     personAvatar: TZOFIA_AVATAR,
+    builtInActionSet: 'share-request',
   },
   {
     id: 'n12',
     zone: 'feed',
     severity: 'low',
-    title: 'CrowdStrike connector sharing request was declined',
-    body: 'Declined by torq-internal · Contact tomer@torq.io if this was a mistake. The workspace owner can re-invite you from Organization settings once access is approved.',
+    title: 'CrowdStrike connector sharing request was declined by torq-internal',
+    body: 'Contact tomer@torq.io if you believe this was a mistake',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: TORQ_AVATAR_BG,
     badgeBg: NEUTRAL_BADGE,
-    occurredAt: agoMs(d(9)),
+    occurredAt: onCalendarDate(2025, 6, 9, 14, 23),
     avatarIcon: 'connector',
     contentScreen: 'workflows',
     target: { type: 'workflows' },
@@ -222,13 +276,13 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     id: 'n13',
     zone: 'feed',
     severity: 'low',
-    title: 'SentinelOne connector was approved and added to your workspace',
-    body: 'Shared by torq-internal · Edit sharing settings anytime',
+    title: 'SentinelOne connector was added to torq-dev',
+    body: 'Shared by torq-internal · Edit sharing settings',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: TORQ_AVATAR_BG,
     badgeBg: SUCCESS_BADGE,
-    occurredAt: agoMs(d(12)),
+    occurredAt: onCalendarDate(2025, 6, 7, 9, 12),
     avatarIcon: 'connector',
     contentScreen: 'workflows',
     target: { type: 'workflows' },
@@ -355,7 +409,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     id: 'n24',
     zone: 'feed',
     severity: 'low',
-    title: 'Priya Patel requested to publish Prod phishing v4',
+    title: 'Prod phishing v4 is pending publish approval',
     body: 'Awaiting your review · submitted yesterday',
     workspaceId: TORQ_PROD,
     workspace: TORQ_PROD_LABEL,
@@ -366,13 +420,14 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     contentScreen: 'workflows',
     target: { type: 'workflow', workflowName: 'Prod phishing v4' },
     personAvatar: { initials: 'P', color: TORQ_PROD_RED },
+    builtInActionSet: 'publish-approval',
   },
   {
     id: 'n25',
     zone: 'feed',
     severity: 'low',
-    title: 'Case export ready for download',
-    body: 'Case #8700 · Expires in 48 hours',
+    title: 'Case export succeeded — Ransomware cases',
+    body: 'Requested Jul 23, 2025 · Link expires in 14 days',
     workspaceId: TORQ_PROD,
     workspace: TORQ_PROD_LABEL,
     avatarBg: CASE_AVATAR_BG,
@@ -381,6 +436,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     avatarIcon: 'export',
     contentScreen: 'cases',
     target: { type: 'case', caseKey: '8700' },
+    builtInActionSet: 'export-download',
   },
   // Today — sharing & collaboration templates
   {
@@ -388,7 +444,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     zone: 'feed',
     severity: 'low',
     title: 'Auto-Remediate Disk Space was shared with torq-dev',
-    body: 'Shared by Alex Rivera from Security-Ops · Review workflow permissions and confirm whether production triggers should inherit the new integration defaults.',
+    body: 'Shared by Alex Rivera from Security-Ops · Review workflow',
     workspaceId: TORQ_DEV,
     workspace: TORQ_DEV_LABEL,
     avatarBg: TORQ_AVATAR_BG,
@@ -398,13 +454,14 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     contentScreen: 'workflows',
     target: { type: 'workflow', workflowName: 'Auto-Remediate Disk Space' },
     personAvatar: { initials: 'A', color: TORQ_DEV_BLUE },
+    builtInActionSet: 'share-request',
   },
   {
     id: 'n27',
     zone: 'feed',
     severity: 'low',
     title: 'Jira Cloud integration was shared with Genesis-Dev-58',
-    body: 'Shared by Jordan Smith from External-Partner · Review integration scopes, webhook URLs, and whether read-only access is sufficient for the audit window.',
+    body: 'Shared by Jordan Smith from External-Partner · Review integration',
     workspaceId: TORQ_STAGING,
     workspace: TORQ_STAGING_LABEL,
     avatarBg: TORQ_AVATAR_BG,
@@ -412,8 +469,9 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     occurredAt: agoMs(m(6)),
     avatarIcon: 'share',
     contentScreen: 'workflows',
-    target: { type: 'workflows' },
+    target: { type: 'integration', integrationName: 'Jira Cloud' },
     personAvatar: { initials: 'J', color: TORQ_STAGING_PURPLE },
+    builtInActionSet: 'share-request',
   },
   {
     id: 'n28',
@@ -429,6 +487,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     avatarIcon: 'share',
     contentScreen: 'workflows',
     target: { type: 'workflows' },
+    builtInActionSet: 'share-request',
   },
   {
     id: 'n29',
@@ -474,6 +533,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     avatarIcon: 'organization',
     contentScreen: 'workflows',
     target: { type: 'workflows' },
+    builtInActionSet: 'org-activate',
   },
   {
     id: 'n32',
@@ -490,6 +550,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     contentScreen: 'workflows',
     target: { type: 'workflows' },
     personAvatar: { initials: 'A', color: TORQ_DEV_BLUE },
+    builtInActionSet: 'invite-accept',
   },
   {
     id: 'n33',
@@ -506,7 +567,7 @@ export const PHASE1_NOTIFICATIONS: Phase1Notification[] = [
     contentScreen: 'workflows',
     target: { type: 'workflows' },
   },
-  // This week — mixed types & workspaces (yesterday / 2–4 days ago)
+  // This week & older — mixed types & workspaces
   {
     id: 'n34',
     zone: 'feed',
@@ -655,6 +716,7 @@ export const PHASE1_INITIAL_STATES: Record<string, 'unseen' | 'seen' | 'read'> =
   n2: 'unseen',
   n3: 'unseen',
   n4: 'unseen',
+  n5: 'unseen',
   n6: 'seen',
   n7: 'unseen',
   n8: 'unseen',

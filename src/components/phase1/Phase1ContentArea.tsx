@@ -3,7 +3,13 @@
 import { Workflow } from 'lucide-react';
 import { APP_NAV_SECTIONS, COMING_SOON_ICONS } from '@/lib/appNavConfig';
 import { getPhase1CaseDetail, PHASE1_CASE_KEYS } from './caseDetails';
+import { Phase1IntegrationDetailView } from './Phase1IntegrationDetailView';
+import { Phase1IntegrationsView } from './Phase1IntegrationsView';
 import { Phase1MainContent } from './Phase1MainContent';
+import {
+  Phase1WorkspaceSettingsView,
+  type WorkspaceSettingsTab,
+} from './Phase1WorkspaceSettingsView';
 import { p1PageTitle } from './phase1Typography';
 
 function Phase1ComingSoon({ pageId }: { pageId: string }) {
@@ -40,17 +46,36 @@ export function Phase1ContentArea({
   pageId,
   caseKey,
   workflowName,
+  integrationName,
   workspaceName,
   onCloseCase,
   onNavigateCase,
+  onIntegrationBack,
+  onOpenIntegration,
+  settingsTab = 'general',
 }: {
   pageId: string;
   caseKey: string | null;
   workflowName?: string | null;
+  integrationName?: string | null;
   workspaceName?: string;
   onCloseCase: () => void;
   onNavigateCase?: (caseKey: string) => void;
+  onIntegrationBack?: () => void;
+  onOpenIntegration?: (integrationName: string) => void;
+  settingsTab?: WorkspaceSettingsTab;
 }) {
+  if (pageId === 'integrations') {
+    if (integrationName) {
+      return (
+        <Phase1IntegrationDetailView
+          integrationName={integrationName}
+          onBack={() => onIntegrationBack?.()}
+        />
+      );
+    }
+    return <Phase1IntegrationsView onOpenIntegration={(name) => onOpenIntegration?.(name)} />;
+  }
   if (pageId === 'workflows') {
     return (
       <Phase1MainContent
@@ -71,6 +96,9 @@ export function Phase1ContentArea({
         caseKeys={PHASE1_CASE_KEYS}
       />
     );
+  }
+  if (pageId === 'settings') {
+    return <Phase1WorkspaceSettingsView initialTab={settingsTab} />;
   }
   return <Phase1ComingSoon pageId={pageId} />;
 }

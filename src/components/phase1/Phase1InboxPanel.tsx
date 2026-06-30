@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, type CSSProperties, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Building2, ChevronsLeft } from 'lucide-react';
+import { Building2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
 import { PHASE1_NOTIFICATIONS } from './data';
 import { getPhase1NotificationsForWorkspace } from './phase1InboxWorkspace';
 import { Phase1UserAvatar } from './phase1Avatars';
 import {
-  IconCheck,
   IconInboxEmpty,
+  IconInboxMenuMarkAllRead,
+  IconInboxMenuSettings,
   IconMarkRead,
   IconMarkUnread,
   IconMoreVertical,
@@ -30,8 +31,23 @@ import {
 } from './icons';
 import type { Phase1NotifRow, Phase1Tab } from './types';
 import { getPhase1BadgeConfig } from './phase1BadgeConfig';
+import {
+  getPhase1BuiltInNotifActions,
+  type Phase1BuiltInActionId,
+} from './phase1BuiltInNotifActions';
+import {
+  Phase1CountdownUndoButton,
+  Phase1NotifActionExecuting,
+  Phase1NotifActionResult,
+  usePhase1NotifActionCountdown,
+} from './phase1NotifActionFlow';
 import { getPhase1NotifRowActionLabel } from './phase1NotificationDrawerContent';
+import {
+  loadPhase1InboxTab,
+  savePhase1InboxTab,
+} from './phase1InboxTabStorage';
 import { rowBackground, isSystemAvatarIcon } from './utils';
+import { FLOATING_INBOX_W } from './Phase1FloatingInboxDrawer';
 import { formatPhase1InboxTimestamp, groupPhase1InboxRows } from './formatTimestamp';
 import { parsePhase1NotifTitle } from './parseNotifTitle';
 import { p1Font, p1Text } from './phase1Typography';
@@ -117,8 +133,39 @@ function NotificationRowExpandLink({
   );
 }
 
+function NotificationRowLearnMoreLink({
+  label,
+  url,
+}: {
+  label: string;
+  url: string;
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        color: NOTIF_BODY_EXPAND_LINK_COLOR,
+        textDecoration: 'none',
+        fontWeight: 400,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.textDecoration = 'underline';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.textDecoration = 'none';
+      }}
+    >
+      {label}
+    </a>
+  );
+}
+
 function NotificationRowBody({
   body,
+  bodyLearnMore,
   showExpandAction,
   rowHovered,
   fadeBackground,
@@ -126,6 +173,7 @@ function NotificationRowBody({
   onExpandedChange,
 }: {
   body: string;
+  bodyLearnMore?: { label: string; url: string };
   /** Read-more prototype: Slack-style Show more / Show less */
   showExpandAction: boolean;
   rowHovered: boolean;
@@ -189,6 +237,15 @@ function NotificationRowBody({
     >
       <p ref={textRef} style={textStyle}>
         {body}
+        {bodyLearnMore ? (
+          <>
+            {' · '}
+            <NotificationRowLearnMoreLink
+              label={bodyLearnMore.label}
+              url={bodyLearnMore.url}
+            />
+          </>
+        ) : null}
       </p>
       {showMore ? (
         <div
@@ -389,6 +446,74 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+function NotificationRowBuiltInActions({
+  row,
+  resolvedActionId,
+  onAction,
+}: {
+  row: Phase1NotifRow;
+  resolvedActionId?: Phase1BuiltInActionId;
+  onAction: (actionId: Phase1BuiltInActionId) => void;
+}) {
+  const config = getPhase1BuiltInNotifActions(row);
+  const { actionPhase, pendingAction, countdownProgress, startCountdown, handleUndo } =
+    usePhase1NotifActionCountdown(onAction);
+
+  if (!config) return null;
+
+  if (resolvedActionId) {
+    return <Phase1NotifActionResult row={row} actionId={resolvedActionId} />;
+  }
+
+  if (actionPhase === 'executing') {
+    return <Phase1NotifActionExecuting />;
+  }
+
+  return (
+    <div
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {config.actions.map((action) => {
+        if (actionPhase === 'countdown' && action.id === pendingAction) {
+          return (
+            <Phase1CountdownUndoButton
+              key={action.id}
+              progress={countdownProgress}
+              onUndo={handleUndo}
+            />
+          );
+        }
+
+        return (
+          <Button
+            key={action.id}
+            theme={action.theme}
+            size="small"
+            disabled={actionPhase === 'countdown'}
+            className={
+              action.theme === 'third'
+                ? 'normal-case min-w-0 px-0 h-8 text-[var(--text-secondary)] hover:bg-transparent active:bg-transparent'
+                : 'normal-case'
+            }
+            leftIcon={
+              action.icon === 'download' ? (
+                <Download className="h-3 w-3" strokeWidth={2} aria-hidden />
+              ) : undefined
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              startCountdown(action.id);
+            }}
+          >
+            {action.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function NotificationRow({
   row,
   isActive,
@@ -398,6 +523,9 @@ function NotificationRow({
   onHover,
   showHoverAction,
   showReadMore,
+  showBuiltInActions,
+  resolvedBuiltInActionId,
+  onBuiltInAction,
 }: {
   row: Phase1NotifRow;
   isActive: boolean;
@@ -409,6 +537,10 @@ function NotificationRow({
   showHoverAction?: boolean;
   /** Slack-style Show more on hover at end of line 2 */
   showReadMore?: boolean;
+  /** Always-visible row actions for eligible notification types */
+  showBuiltInActions?: boolean;
+  resolvedBuiltInActionId?: Phase1BuiltInActionId;
+  onBuiltInAction?: (actionId: Phase1BuiltInActionId) => void;
 }) {
   const [hoverSettled, setHoverSettled] = useState(false);
   const [actionReady, setActionReady] = useState(false);
@@ -419,8 +551,7 @@ function NotificationRow({
   const hoverActionLabel = showHoverAction ? getPhase1NotifRowActionLabel(row) : null;
   const isUnread = row.state !== 'read';
   const showStatusDot = isUnread && !isActive;
-  const statusDotColor =
-    row.state === 'unseen' ? 'var(--switch-bg-on-idle)' : 'var(--neutral-12)';
+  const statusDotColor = 'var(--switch-bg-on-idle)';
   const isWorkflowAvatar = row.avatarIcon === 'workflow';
   const isMentionAvatar = row.avatarIcon === 'mention';
   const isSystemAvatar = isSystemAvatarIcon(row.avatarIcon);
@@ -439,6 +570,7 @@ function NotificationRow({
   const avatarShellBg = isPersonAvatar ? 'transparent' : avatarBg;
   const avatarIconColor = isWorkflowAvatar ? PHASE1_WORKFLOW_AVATAR_ICON : 'white';
   const badgeConfig = getPhase1BadgeConfig(row);
+  const builtInActions = showBuiltInActions ? getPhase1BuiltInNotifActions(row) : null;
   const showAction = Boolean(actionReady && hoverActionLabel);
 
   const clearActionDwellTimer = useCallback(() => {
@@ -482,7 +614,7 @@ function NotificationRow({
       }}
       onMouseLeave={resetHover}
       animate={{
-        paddingBottom: showAction ? 14 : 8,
+        paddingBottom: showAction ? 14 : builtInActions ? 12 : 8,
       }}
       transition={{
         paddingBottom: NOTIF_ROW_MOTION,
@@ -657,6 +789,7 @@ function NotificationRow({
         {row.body ? (
           <NotificationRowBody
             body={row.body}
+            bodyLearnMore={row.bodyLearnMore}
             showExpandAction={Boolean(showReadMore)}
             rowHovered={hoverSettled}
             fadeBackground={rowFadeBg}
@@ -674,6 +807,13 @@ function NotificationRow({
             {row.workspace}
           </Tag>
         </div>
+        {showBuiltInActions && onBuiltInAction ? (
+          <NotificationRowBuiltInActions
+            row={row}
+            resolvedActionId={resolvedBuiltInActionId}
+            onAction={onBuiltInAction}
+          />
+        ) : null}
         <AnimatePresence initial={false}>
           {showAction && (
             <motion.div
@@ -712,7 +852,8 @@ export type Phase1InboxInteraction =
   | 'navigate'
   | 'hover-preview'
   | 'hover-action'
-  | 'read-more';
+  | 'read-more'
+  | 'builtin-action';
 
 export interface Phase1InboxPanelProps {
   states: Record<string, 'unseen' | 'seen' | 'read'>;
@@ -723,6 +864,7 @@ export interface Phase1InboxPanelProps {
   currentWorkspaceId?: string;
   interaction?: Phase1InboxInteraction;
   onRowHover?: (row: Phase1NotifRow | null, el: HTMLElement | null) => void;
+  onBuiltInAction?: (row: Phase1NotifRow, actionId: Phase1BuiltInActionId) => void;
   variant?: 'docked' | 'floating';
 }
 
@@ -734,12 +876,15 @@ export function Phase1InboxPanel({
   currentWorkspaceId = 'torq-dev',
   interaction = 'navigate',
   onRowHover,
+  onBuiltInAction,
   variant = 'docked',
 }: Phase1InboxPanelProps) {
-  const [tab, setTab] = useState<Phase1Tab>('all');
+  const [tab, setTab] = useState<Phase1Tab>(() => loadPhase1InboxTab());
   const [menuOpen, setMenuOpen] = useState(false);
-  const [panelHovered, setPanelHovered] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [resolvedBuiltInActions, setResolvedBuiltInActions] = useState<
+    Record<string, Phase1BuiltInActionId>
+  >({});
   const unreadSnapshotRef = useRef<Set<string> | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -779,6 +924,7 @@ export function Phase1InboxPanel({
       refreshUnreadSnapshot();
     }
     setTab(next);
+    savePhase1InboxTab(next);
   }
 
   const tabFiltered = useMemo(() => {
@@ -818,6 +964,34 @@ export function Phase1InboxPanel({
     setMenuOpen(false);
   }
 
+  function openNotificationsSettings() {
+    window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'notifications' }));
+    setMenuOpen(false);
+  }
+
+  const menuItemStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    minHeight: 32,
+    padding: '6px 8px',
+    border: 'none',
+    background: 'transparent',
+    borderRadius: 6,
+    fontSize: 12,
+    lineHeight: '16px',
+    fontFamily: p1Font.family,
+    fontWeight: 400,
+    color: '#090A0B',
+    cursor: 'pointer',
+    textAlign: 'left',
+  };
+
+  function handleMenuItemHover(e: MouseEvent<HTMLButtonElement>, active: boolean) {
+    e.currentTarget.style.background = active ? '#F5F6FA' : 'transparent';
+  }
+
   function handleRowSelect(row: Phase1NotifRow) {
     setActiveId(row.id);
     if (row.state !== 'read') {
@@ -834,11 +1008,9 @@ export function Phase1InboxPanel({
 
   return (
     <section
-      onMouseEnter={() => setPanelHovered(true)}
-      onMouseLeave={() => setPanelHovered(false)}
       style={{
         width: '100%',
-        minWidth: variant === 'floating' ? 0 : 354,
+        minWidth: variant === 'floating' ? 0 : FLOATING_INBOX_W,
         height: '100%',
         background: '#FFFFFF',
         borderRight: variant === 'floating' ? 'none' : '1px solid var(--border-level-2)',
@@ -849,8 +1021,8 @@ export function Phase1InboxPanel({
       }}
     >
       {/* Header — Figma 6177-32782 */}
-      <header style={{ flexShrink: 0, borderBottom: '1px solid #E5E7EB' }}>
-        {/* Row 1: Inbox | (spacer) | collapse on panel hover | ··· */}
+      <header style={{ flexShrink: 0, borderBottom: '1px solid #DDDEE5' }}>
+        {/* Row 1: Inbox | (spacer) | ··· */}
         <div
           style={{
             display: 'flex',
@@ -875,43 +1047,6 @@ export function Phase1InboxPanel({
             </h2>
 
           <div style={{ flex: 1, minWidth: 8 }} aria-hidden />
-
-          <AnimatePresence>
-            {panelHovered && (
-              <motion.button
-                type="button"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.12 }}
-                onClick={onClose}
-                title="Collapse panel"
-                aria-label="Collapse panel"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: 6,
-                  cursor: 'pointer',
-                  background: 'transparent',
-                  color: p1Text.tertiary,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#F3F4F6';
-                  e.currentTarget.style.color = p1Text.secondary;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = p1Text.tertiary;
-                }}
-              >
-                <ChevronsLeft className="h-4 w-4" />
-              </motion.button>
-            )}
-          </AnimatePresence>
 
             <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
               <button
@@ -944,37 +1079,56 @@ export function Phase1InboxPanel({
                     top: '100%',
                     right: 0,
                     marginTop: 4,
-                    background: 'white',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: 8,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-                    minWidth: 160,
+                    background: '#FFFFFF',
+                    border: '1px solid #DDDEE5',
+                    borderRadius: 6,
+                    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.12)',
+                    minWidth: 195,
                     zIndex: 30,
-                    padding: 4,
+                    padding: '12px 0',
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={markAllRead}
+                  <div
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      flexDirection: 'column',
                       gap: 8,
                       width: '100%',
-                      padding: '8px 10px',
-                      border: 'none',
-                      background: 'transparent',
-                      borderRadius: 6,
-                      fontSize: p1Font.body1,
-                      fontFamily: p1Font.family,
-                      color: p1Text.primary,
-                      cursor: 'pointer',
-                      textAlign: 'left',
+                      padding: '0 16px',
+                      boxSizing: 'border-box',
                     }}
                   >
-                    <IconCheck />
-                    Mark all as read
-                  </button>
+                    <button
+                      type="button"
+                      onClick={markAllRead}
+                      style={menuItemStyle}
+                      onMouseEnter={(e) => handleMenuItemHover(e, true)}
+                      onMouseLeave={(e) => handleMenuItemHover(e, false)}
+                    >
+                      <IconInboxMenuMarkAllRead />
+                      Mark all as read
+                    </button>
+                    <div
+                      role="separator"
+                      aria-hidden
+                      style={{
+                        width: '100%',
+                        height: 1,
+                        background: '#DDDEE5',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={openNotificationsSettings}
+                      style={menuItemStyle}
+                      onMouseEnter={(e) => handleMenuItemHover(e, true)}
+                      onMouseLeave={(e) => handleMenuItemHover(e, false)}
+                    >
+                      <IconInboxMenuSettings />
+                      Notifications settings
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1050,13 +1204,14 @@ export function Phase1InboxPanel({
           {empty ? (
             <div
               style={{
-                height: 220,
+                minHeight: '100%',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
                 padding: 24,
+                boxSizing: 'border-box',
               }}
             >
               <div
@@ -1096,6 +1251,19 @@ export function Phase1InboxPanel({
                       onMarkUnread={() => markUnread(row.id)}
                       showHoverAction={interaction === 'hover-action'}
                       showReadMore={interaction === 'read-more'}
+                      showBuiltInActions={interaction === 'builtin-action'}
+                      resolvedBuiltInActionId={resolvedBuiltInActions[row.id]}
+                      onBuiltInAction={
+                        interaction === 'builtin-action' && onBuiltInAction
+                          ? (actionId) => {
+                              setResolvedBuiltInActions((prev) => ({
+                                ...prev,
+                                [row.id]: actionId,
+                              }));
+                              onBuiltInAction(row, actionId);
+                            }
+                          : undefined
+                      }
                       onHover={
                         interaction === 'hover-preview'
                           ? (el) => handleRowHover(row, el)

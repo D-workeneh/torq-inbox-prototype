@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type CSSProperties } from 'react';
-import { ChevronDown, ChevronUp, Globe, Search } from 'lucide-react';
+import { ChevronUp, Globe, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PHASE1_WORKFLOW_GROUPS } from './data';
 import {
@@ -573,19 +573,9 @@ export function Phase1WorkflowsView() {
         }}
       >
         <h1 style={p1PageTitle}>Workflows</h1>
-        <div className="inline-flex items-center">
-          <Button variant="dark" size="small" className="!rounded-r-none">
-            Create
-          </Button>
-          <Button
-            variant="dark"
-            size="small"
-            aria-label="Create options"
-            className="!rounded-l-none !border-l !border-white/20 !px-2"
-          >
-            <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
-          </Button>
-        </div>
+        <Button variant="dark" size="small">
+          Create
+        </Button>
       </div>
 
       <div

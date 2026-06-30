@@ -1003,7 +1003,7 @@ export function TorqSettingsPage({
       case 'preferences':
         return 'Workspace branding, theme, and logos across Torq and Interact.';
       case 'notifications':
-        return 'Decide when and how you want to be notified.';
+        return 'Manage alerts and configure workspace-wide notification policies.';
       case 'usage':
         return 'Resource usage and ownership for the workspace you are working in right now.';
       case 'users':
@@ -1108,17 +1108,27 @@ export function TorqSettingsPage({
             {sectionTitle}
           </h2>
           {sectionDescription && (
-            <p className="text-[length:var(--font-size-body1)] text-[var(--text-secondary)] mb-6 max-w-2xl">
+            <p
+              className={`text-[length:var(--font-size-body1)] text-[var(--text-secondary)] max-w-2xl ${
+                active === 'notifications' ? 'mb-4' : 'mb-6'
+              }`}
+            >
               {sectionDescription}
             </p>
           )}
-          <div className={`border-b border-[var(--border-level-1)] ${sectionDescription ? 'mb-0' : 'mt-2'}`} />
+          {active !== 'notifications' && (
+            <div className={`border-b border-[var(--border-level-1)] ${sectionDescription ? 'mb-0' : 'mt-2'}`} />
+          )}
         </div>
         <div
           ref={contentScrollRef}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
-          <div className="px-10 pt-8 pb-12 w-full max-w-[920px] [&>*]:w-full">
+          <div
+            className={`px-10 pb-12 w-full max-w-[920px] [&>*]:w-full ${
+              active === 'notifications' ? 'pt-0' : 'pt-8'
+            }`}
+          >
             {renderContent()}
           </div>
         </div>

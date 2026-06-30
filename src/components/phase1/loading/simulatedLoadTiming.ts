@@ -1,4 +1,4 @@
-export type SimulatedLoadProfile = 'default' | 'workspace-switch';
+export type SimulatedLoadProfile = 'default' | 'workspace-switch' | 'cases';
 
 const CROSS_WORKSPACE_LOAD_MIN_MS = 5000;
 const CROSS_WORKSPACE_LOAD_MAX_MS = 8000;
@@ -14,6 +14,16 @@ export function getSimulatedLoadDurations(profile: SimulatedLoadProfile = 'defau
   if (profile === 'workspace-switch') {
     const totalMs = 900 + Math.floor(Math.random() * 400);
     const spinnerMs = Math.round(totalMs * 0.5);
+    return {
+      totalMs,
+      spinnerMs,
+      skeletonMs: totalMs - spinnerMs,
+    };
+  }
+  if (profile === 'cases') {
+    const totalMs = 4500 + Math.floor(Math.random() * 1000);
+    const spinnerShare = 0.28 + Math.random() * 0.12;
+    const spinnerMs = Math.round(totalMs * spinnerShare);
     return {
       totalMs,
       spinnerMs,

@@ -45,6 +45,17 @@ export const APP_WORKSPACES: Workspace[] = [
     avatarLetter: 'P',
   },
   { id: 'acme-corp', name: 'acme-corp', color: '#FF8E2E', image: ACME_AVATAR_SRC },
+  { id: 'content-team', name: 'content-team', color: '#0D652D', avatarLetter: 'C' },
+  { id: 'd-work', name: 'D_work', color: '#12B5CB', avatarLetter: 'D' },
+  {
+    id: 'session-permissions',
+    name: 'torqing-session-permissions',
+    color: '#E37400',
+    avatarLetter: 'T',
+  },
+  { id: 'uri-playground', name: 'uri-playground', color: '#8FBF1A', avatarLetter: 'U' },
+  { id: 'falcon-soc', name: 'Falcon-SOC', color: '#D93025', avatarLetter: 'F' },
+  { id: 'nebula-ops', name: 'nebula-ops', color: '#1A73E8', avatarLetter: 'N' },
 ];
 
 export const APP_NAV_SECTIONS: NavSection[] = [

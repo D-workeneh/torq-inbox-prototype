@@ -1,17 +1,28 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ArrowUpRight,
+  Bell,
   BookMarked,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ChevronsUpDown,
   Inbox as InboxSidebarIcon,
+  Key,
+  Library,
+  LogOut,
+  Moon,
+  Pencil,
+  Search,
   Settings as SettingsIcon,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/Toggle';
 import {
   APP_NAV_SECTIONS,
   APP_WORKSPACES,
@@ -20,6 +31,32 @@ import {
   type NavSection,
   type Workspace,
 } from '@/lib/appNavConfig';
+
+const SIDEBAR_USER = {
+  name: 'David Workeneh',
+  role: 'Owner',
+  email: 'david.workeneh@torq.io',
+  initials: 'D',
+  avatarColor: '#2864FF',
+} as const;
+
+function UserAvatar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sz =
+    size === 'sm'
+      ? 'h-6 w-6 text-[10px]'
+      : size === 'lg'
+        ? 'h-10 w-10 text-base'
+        : 'h-8 w-8 text-sm';
+
+  return (
+    <span
+      className={`${sz} flex shrink-0 select-none items-center justify-center rounded-full font-semibold text-white`}
+      style={{ backgroundColor: SIDEBAR_USER.avatarColor }}
+    >
+      {SIDEBAR_USER.initials}
+    </span>
+  );
+}
 
 function SidebarTooltip({ label, children }: { label: string; children: React.ReactNode }) {
   if (!label) return <>{children}</>;
@@ -73,16 +110,22 @@ export function WorkspaceAvatar({
 function WorkspacePicker({
   current,
   onSelect,
+  onManageOrganization,
   onClose,
   anchorRef,
 }: {
   current: string;
   onSelect: (w: string) => void;
+  onManageOrganization?: () => void;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [query, setQuery] = useState('');
+  const [manageHover, setManageHover] = useState(false);
+  const [showManageTooltip, setShowManageTooltip] = useState(false);
+  const manageTooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLayoutEffect(() => {
     if (anchorRef.current) {
@@ -102,6 +145,31 @@ function WorkspacePicker({
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose, anchorRef]);
 
+  useEffect(
+    () => () => {
+      if (manageTooltipTimer.current) clearTimeout(manageTooltipTimer.current);
+    },
+    [],
+  );
+
+  const filteredWorkspaces = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return APP_WORKSPACES;
+    return APP_WORKSPACES.filter((ws) => ws.name.toLowerCase().includes(q));
+  }, [query]);
+
+  function handleManageEnter() {
+    setManageHover(true);
+    if (manageTooltipTimer.current) clearTimeout(manageTooltipTimer.current);
+    manageTooltipTimer.current = setTimeout(() => setShowManageTooltip(true), 600);
+  }
+
+  function handleManageLeave() {
+    setManageHover(false);
+    setShowManageTooltip(false);
+    if (manageTooltipTimer.current) clearTimeout(manageTooltipTimer.current);
+  }
+
   if (!pos) return null;
 
   return createPortal(
@@ -114,31 +182,218 @@ function WorkspacePicker({
       style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
       className="w-60 rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] py-1 shadow-xl"
     >
-      <p className="px-3 py-1.5 text-[var(--font-size-xs)] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-        Switch workspace
-      </p>
-      {APP_WORKSPACES.map((ws) => {
-        const isActive = ws.id === current;
-        return (
-          <button
-            key={ws.id}
-            type="button"
-            onClick={() => {
-              onSelect(ws.id);
-              onClose();
-            }}
-            className={`flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] transition-colors ${
-              isActive
-                ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]'
-                : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+      <div className="px-2 pb-1 pt-1.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
+          <input
+            type="text"
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search workspace"
+            className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-2)] bg-[var(--color-surface-secondary)] py-1.5 pl-8 pr-2.5 text-[var(--font-size-sm)] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-primary-500)]"
+          />
+        </div>
+      </div>
+
+      {/* Scrollable list — sized to ~5 rows, rest reachable by scroll/search */}
+      <div className="max-h-[200px] overflow-y-auto py-0.5">
+        {filteredWorkspaces.length === 0 ? (
+          <p className="px-3 py-3 text-center text-[var(--font-size-sm)] text-[var(--color-text-tertiary)]">
+            No workspaces found
+          </p>
+        ) : (
+          filteredWorkspaces.map((ws) => {
+            const isActive = ws.id === current;
+            return (
+              <button
+                key={ws.id}
+                type="button"
+                onClick={() => {
+                  onSelect(ws.id);
+                  onClose();
+                }}
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-[var(--font-size-sm)] transition-colors ${
+                  isActive
+                    ? 'bg-[var(--color-primary-50)] text-[var(--color-primary-500)]'
+                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+                }`}
+              >
+                <WorkspaceAvatar wsId={ws.id} size="sm" />
+                <span className="flex-1 truncate text-left">{ws.name}</span>
+                {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary-500)]" />}
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      <div className="mx-3 my-1.5 h-px bg-[var(--color-border-2)]" role="separator" />
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => {
+            onManageOrganization?.();
+            onClose();
+          }}
+          onMouseEnter={handleManageEnter}
+          onMouseLeave={handleManageLeave}
+          className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-2 rounded-[var(--radius-sm)] px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
+        >
+          <span className="flex-1 text-left">Manage organization</span>
+          <ArrowUpRight
+            className={`h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)] transition-opacity duration-100 ${
+              manageHover ? 'opacity-100' : 'opacity-0'
             }`}
-          >
-            <WorkspaceAvatar wsId={ws.id} size="sm" />
-            <span className="flex-1 truncate text-left">{ws.name}</span>
-            {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary-500)]" />}
-          </button>
-        );
-      })}
+          />
+        </button>
+
+        <AnimatePresence>
+          {showManageTooltip && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.12 }}
+              role="tooltip"
+              className="pointer-events-none absolute bottom-full left-1.5 right-1.5 z-[10000] mb-1.5 rounded-[var(--radius-sm)] bg-[var(--color-neutral-800)] px-2.5 py-1.5 text-[var(--font-size-xs)] leading-snug text-white shadow-lg"
+            >
+              Opens organization management in a new tab, where you can manage members,
+              workspaces, and settings.
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>,
+    document.body,
+  );
+}
+
+function UserProfileMenu({
+  onClose,
+  anchorRef,
+  align = 'expanded',
+  onManageNotifications,
+}: {
+  onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  align?: 'expanded' | 'collapsed';
+  onManageNotifications?: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null);
+  const [knowledgeHubOn, setKnowledgeHubOn] = useState(true);
+
+  useLayoutEffect(() => {
+    if (anchorRef.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setPos({ bottom: window.innerHeight - r.top + 8, left: 16 });
+    }
+  }, [anchorRef, align]);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current?.contains(e.target as Node) || anchorRef.current?.contains(e.target as Node)) {
+        return;
+      }
+      onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose, anchorRef]);
+
+  if (!pos) return null;
+
+  const menuItemClass =
+    'flex w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]';
+
+  return createPortal(
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 8, scale: 0.97 }}
+      transition={{ duration: 0.14 }}
+      style={{
+        position: 'fixed',
+        bottom: pos.bottom,
+        left: pos.left,
+        zIndex: 9999,
+        width: 280,
+      }}
+      className="rounded-[var(--radius-md)] border border-[var(--color-border-2)] bg-[var(--color-surface-primary)] py-1 shadow-xl"
+    >
+      <div className="flex items-start gap-3 px-3 py-2.5">
+        <UserAvatar />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">
+            {SIDEBAR_USER.name} - {SIDEBAR_USER.role}
+          </p>
+          <p className="truncate text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
+            {SIDEBAR_USER.email}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Edit profile"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      </div>
+
+      <div className="mx-3 my-1 h-px bg-[var(--color-border-2)]" role="separator" />
+
+      <div className="px-1.5 py-0.5">
+        <button type="button" className={menuItemClass}>
+          <Key className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span className="flex-1 text-left">API Keys</span>
+        </button>
+
+        <button
+          type="button"
+          className={menuItemClass}
+          onClick={() => {
+            onManageNotifications?.();
+            onClose();
+          }}
+        >
+          <Bell className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span className="flex-1 text-left">Manage notifications</span>
+        </button>
+
+        <div className={`${menuItemClass} justify-between`}>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <Library className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+            <span className="truncate text-left">Knowledge Hub Widget</span>
+          </div>
+          <Switch
+            size="small"
+            on={knowledgeHubOn}
+            onChange={setKnowledgeHubOn}
+            aria-label="Knowledge Hub Widget"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+
+        <button type="button" className={`${menuItemClass} justify-between`}>
+          <span className="flex items-center gap-2.5">
+            <Moon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+            Change theme
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-[var(--color-text-tertiary)]" />
+        </button>
+      </div>
+
+      <div className="mx-3 my-1 h-px bg-[var(--color-border-2)]" role="separator" />
+
+      <div className="px-1.5 pb-1 pt-0.5">
+        <button type="button" className={menuItemClass}>
+          <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <span className="flex-1 text-left">Sign Out</span>
+        </button>
+      </div>
     </motion.div>,
     document.body,
   );
@@ -246,6 +501,9 @@ export interface AppSidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   currentWorkspace: string;
   onWorkspaceChange: (workspaceId: string) => void;
+  onManageOrganization?: () => void;
+  onManageNotifications?: () => void;
+  onOpenSettings?: () => void;
   currentPage: string;
   onNavigate: (pageId: string) => void;
   inboxOpen: boolean;
@@ -261,6 +519,9 @@ export function AppSidebar({
   onCollapsedChange,
   currentWorkspace,
   onWorkspaceChange,
+  onManageOrganization,
+  onManageNotifications,
+  onOpenSettings,
   currentPage,
   onNavigate,
   inboxOpen,
@@ -270,8 +531,10 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [sectionToOpen, setSectionToOpen] = useState<string | null>(null);
   const workspaceBtnRef = useRef<HTMLButtonElement>(null);
+  const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const sidebarW = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED;
 
@@ -306,7 +569,7 @@ export function AppSidebar({
       style={{ position: 'relative', zIndex: 45 }}
       onMouseEnter={() => setSidebarHovered(true)}
       onMouseLeave={() => setSidebarHovered(false)}
-      className="flex h-full shrink-0 flex-col overflow-hidden border-r border-[var(--color-border-2)] bg-[var(--color-surface-secondary)]"
+      className="flex h-full shrink-0 flex-col overflow-hidden border-r border-[var(--phase1-chrome-separator,var(--color-border-2))] bg-[var(--color-surface-secondary)]"
     >
       <div className="relative shrink-0 border-b border-[var(--color-border-1)]">
         <AnimatePresence mode="wait" initial={false}>
@@ -409,6 +672,7 @@ export function AppSidebar({
                   <WorkspacePicker
                     current={currentWorkspace}
                     onSelect={onWorkspaceChange}
+                    onManageOrganization={onManageOrganization}
                     onClose={() => setWorkspaceOpen(false)}
                     anchorRef={workspaceBtnRef}
                   />
@@ -547,9 +811,13 @@ export function AppSidebar({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'general' }));
+                onOpenSettings?.();
               }}
-              className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
+              className={`flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] transition-colors ${
+                currentPage === 'settings'
+                  ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)]'
+                  : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+              }`}
             >
               <SettingsIcon className="h-4 w-4" />
             </button>
@@ -558,10 +826,12 @@ export function AppSidebar({
           <div className="px-2">
             <button
               type="button"
-              onClick={() =>
-                window.dispatchEvent(new CustomEvent('torq:open-settings', { detail: 'general' }))
-              }
-              className="flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]"
+              onClick={() => onOpenSettings?.()}
+              className={`flex w-full items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-[var(--font-size-sm)] transition-colors ${
+                currentPage === 'settings'
+                  ? 'bg-[var(--color-neutral-150)] text-[var(--color-text-primary)]'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text-primary)]'
+              }`}
             >
               <SettingsIcon className="h-3.5 w-3.5 shrink-0" />
               Settings
@@ -569,31 +839,45 @@ export function AppSidebar({
           </div>
         )}
 
-        <div
-          className={`mt-1 flex items-center border-t border-[var(--color-border-1)] ${collapsed ? 'w-full justify-center px-2 py-2.5' : 'gap-2 px-3 py-2.5'}`}
+        <button
+          ref={profileBtnRef}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setProfileOpen((o) => !o);
+          }}
+          className={`mt-1 flex w-full items-center border-t border-[var(--color-border-1)] transition-colors hover:bg-[var(--color-surface-tertiary)] ${
+            collapsed ? 'justify-center px-2 py-2.5' : 'gap-2 px-3 py-2.5'
+          } ${profileOpen ? 'bg-[var(--color-surface-tertiary)]' : ''}`}
         >
           {collapsed ? (
-            <SidebarTooltip label="David Workeneh">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white">
-                D
-              </span>
-            </SidebarTooltip>
+            <UserAvatar size="sm" />
           ) : (
             <>
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white">
-                D
-              </span>
-              <div className="min-w-0 flex-1">
+              <UserAvatar />
+              <div className="min-w-0 flex-1 text-left">
                 <p className="truncate text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                  David Workeneh
+                  {SIDEBAR_USER.name} - {SIDEBAR_USER.role}
                 </p>
                 <p className="truncate text-[var(--font-size-xs)] text-[var(--color-text-tertiary)]">
-                  david.workeneh@torq.io
+                  {SIDEBAR_USER.email}
                 </p>
               </div>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
             </>
           )}
-        </div>
+        </button>
+
+        <AnimatePresence>
+          {profileOpen && (
+            <UserProfileMenu
+              anchorRef={profileBtnRef}
+              align={collapsed ? 'collapsed' : 'expanded'}
+              onClose={() => setProfileOpen(false)}
+              onManageNotifications={onManageNotifications}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </motion.aside>
   );

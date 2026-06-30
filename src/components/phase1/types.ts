@@ -2,12 +2,20 @@ export type Phase1Severity = 'critical' | 'high' | 'low';
 export type Phase1Zone = 'pinned' | 'feed';
 export type Phase1NotifState = 'unseen' | 'seen' | 'read';
 export type Phase1Tab = 'all' | 'unread';
+
+export interface Phase1BrowserTab {
+  id: string;
+  workspaceId: string;
+  isActive: boolean;
+  isPending?: boolean;
+}
 export type Phase1ContentScreen = 'workflows' | 'cases';
 
 export type Phase1NotifTarget =
   | { type: 'case'; caseKey: string }
   | { type: 'workflows' }
-  | { type: 'workflow'; workflowName: string };
+  | { type: 'workflow'; workflowName: string }
+  | { type: 'integration'; integrationName: string };
 
 export type Phase1CasePriority = 'low' | 'medium' | 'high' | 'critical';
 
@@ -79,6 +87,15 @@ export interface Phase1CaseDetail {
   assigneeColor: string;
 }
 
+/** Built-in row actions (Notification + Action prototype) */
+export type Phase1BuiltInActionSet =
+  | 'publish-approval'
+  | 'share-request'
+  | 'export-retry'
+  | 'export-download'
+  | 'org-activate'
+  | 'invite-accept';
+
 export type Phase1AvatarIcon =
   | 'workflow'
   | 'ai'
@@ -116,6 +133,10 @@ export interface Phase1Notification {
   personAvatar?: Phase1PersonAvatar;
   /** AI credit row — drives preview % and Usage alignment */
   aiCreditsSnapshot?: { used: number; limit: number };
+  /** Inline docs link appended to body copy (e.g. export size limits) */
+  bodyLearnMore?: { label: string; url: string };
+  /** Always-visible inbox actions in the built-in action prototype */
+  builtInActionSet?: Phase1BuiltInActionSet;
 }
 
 export interface Phase1NotifRow extends Phase1Notification {

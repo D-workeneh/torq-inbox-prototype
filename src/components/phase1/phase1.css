@@ -1,3 +1,7 @@
+.phase1-root {
+  --phase1-chrome-h: 78px;
+}
+
 @keyframes phase1-pulse {
   0%,
   100% {

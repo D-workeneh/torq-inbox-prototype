@@ -3,6 +3,10 @@
  * inbox filter reads the same snapshot for pillar alignment + muted UI.
  */
 
+import {
+  loadOrgNotificationSettings,
+} from '@/lib/orgNotificationSettingsStorage';
+
 export type NotifPillar = 'platform' | 'hypersoc' | 'hyperautomation' | 'socrates';
 
 export type ChannelKey = 'inapp' | 'email';
@@ -82,18 +86,60 @@ export function buildDefaultNotifChannels(): NotifChannelState {
   return state as NotifChannelState;
 }
 
+export const SMART_GROUPING_OCCURRENCE_OPTIONS = ['2', '3', '4', '5'] as const;
+export type SmartGroupingOccurrences = (typeof SMART_GROUPING_OCCURRENCE_OPTIONS)[number];
+
+export const SMART_GROUPING_WINDOW_OPTIONS = [
+  '5 minutes',
+  '10 minutes',
+  '15 minutes',
+  '30 minutes',
+  '60 minutes',
+] as const;
+export type SmartGroupingWindow = (typeof SMART_GROUPING_WINDOW_OPTIONS)[number];
+
+/** @deprecated Legacy throttle labels — migrated to smart grouping window */
 export const THROTTLE_OPTIONS = ['5 min', '10 min', '15 min', '30 min', '60 min'] as const;
 export type ThrottleInterval = (typeof THROTTLE_OPTIONS)[number];
+
+const LEGACY_THROTTLE_TO_WINDOW: Record<string, SmartGroupingWindow> = {
+  '5 min': '5 minutes',
+  '10 min': '10 minutes',
+  '15 min': '15 minutes',
+  '30 min': '30 minutes',
+  '60 min': '60 minutes',
+};
 
 export const NOTIF_SETTINGS_STORAGE_KEY = 'torq:notification-settings-v1';
 export const NOTIF_SETTINGS_SAVED_EVENT = 'torq:notif-settings-saved';
 
 export type SavedNotificationSettings = {
   version: 1;
-  criticalBypass: boolean;
-  throttleInterval: string;
+  smartGroupingOccurrences: string;
+  smartGroupingWindow: string;
+  /** When true, end users cannot change smart grouping on My preferences */
+  smartGroupingLocked?: boolean;
+  userSmartGroupingOccurrences?: string;
+  userSmartGroupingWindow?: string;
   channels: NotifChannelState;
 };
+
+export function normalizeSmartGroupingOccurrences(value: unknown): SmartGroupingOccurrences {
+  const str = typeof value === 'string' ? value : '3';
+  return SMART_GROUPING_OCCURRENCE_OPTIONS.includes(str as SmartGroupingOccurrences)
+    ? (str as SmartGroupingOccurrences)
+    : '3';
+}
+
+export function normalizeSmartGroupingWindow(value: unknown, legacyThrottle?: unknown): SmartGroupingWindow {
+  if (typeof value === 'string' && SMART_GROUPING_WINDOW_OPTIONS.includes(value as SmartGroupingWindow)) {
+    return value as SmartGroupingWindow;
+  }
+  if (typeof legacyThrottle === 'string' && LEGACY_THROTTLE_TO_WINDOW[legacyThrottle]) {
+    return LEGACY_THROTTLE_TO_WINDOW[legacyThrottle];
+  }
+  return '5 minutes';
+}
 
 export function mergeChannelsWithDefaults(partial: Partial<NotifChannelState> | undefined): NotifChannelState {
   const base = buildDefaultNotifChannels();
@@ -113,12 +159,25 @@ export function loadSavedNotificationSettings(): SavedNotificationSettings | nul
   try {
     const raw = window.localStorage.getItem(NOTIF_SETTINGS_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<SavedNotificationSettings>;
-    if (parsed.version !== 1 || !parsed.channels || typeof parsed.criticalBypass !== 'boolean') return null;
+    const parsed = JSON.parse(raw) as Partial<SavedNotificationSettings> & {
+      criticalBypass?: boolean;
+      throttleInterval?: string;
+    };
+    if (parsed.version !== 1 || !parsed.channels) return null;
     return {
       version: 1,
-      criticalBypass: parsed.criticalBypass,
-      throttleInterval: typeof parsed.throttleInterval === 'string' ? parsed.throttleInterval : '10 min',
+      smartGroupingOccurrences: normalizeSmartGroupingOccurrences(parsed.smartGroupingOccurrences),
+      smartGroupingWindow: normalizeSmartGroupingWindow(
+        parsed.smartGroupingWindow,
+        parsed.throttleInterval,
+      ),
+      smartGroupingLocked: parsed.smartGroupingLocked === true,
+      userSmartGroupingOccurrences: parsed.userSmartGroupingOccurrences
+        ? normalizeSmartGroupingOccurrences(parsed.userSmartGroupingOccurrences)
+        : undefined,
+      userSmartGroupingWindow: parsed.userSmartGroupingWindow
+        ? normalizeSmartGroupingWindow(parsed.userSmartGroupingWindow)
+        : undefined,
       channels: mergeChannelsWithDefaults(parsed.channels as Partial<NotifChannelState>),
     };
   } catch {
@@ -135,22 +194,168 @@ export function saveNotificationSettings(data: SavedNotificationSettings): void 
   }
 }
 
-export function getInitialNotificationSettingsState(): {
-  criticalBypass: boolean;
-  throttleInterval: ThrottleInterval;
+export function getWorkspaceSavedState(): {
+  smartGroupingOccurrences: SmartGroupingOccurrences;
+  smartGroupingWindow: SmartGroupingWindow;
+  smartGroupingLocked: boolean;
+  userSmartGroupingOccurrences: SmartGroupingOccurrences;
+  userSmartGroupingWindow: SmartGroupingWindow;
   channels: NotifChannelState;
 } {
   const s = loadSavedNotificationSettings();
   if (!s) {
-    return { criticalBypass: true, throttleInterval: '10 min', channels: buildDefaultNotifChannels() };
+    return {
+      smartGroupingOccurrences: '3',
+      smartGroupingWindow: '5 minutes',
+      smartGroupingLocked: false,
+      userSmartGroupingOccurrences: '3',
+      userSmartGroupingWindow: '5 minutes',
+      channels: buildDefaultNotifChannels(),
+    };
   }
-  const throttle: ThrottleInterval = THROTTLE_OPTIONS.includes(s.throttleInterval as ThrottleInterval)
-    ? (s.throttleInterval as ThrottleInterval)
-    : '10 min';
+  const policyOccurrences = normalizeSmartGroupingOccurrences(s.smartGroupingOccurrences);
+  const policyWindow = normalizeSmartGroupingWindow(s.smartGroupingWindow);
   return {
-    criticalBypass: s.criticalBypass,
-    throttleInterval: throttle,
+    smartGroupingOccurrences: policyOccurrences,
+    smartGroupingWindow: policyWindow,
+    smartGroupingLocked: s.smartGroupingLocked === true,
+    userSmartGroupingOccurrences: normalizeSmartGroupingOccurrences(
+      s.userSmartGroupingOccurrences ?? s.smartGroupingOccurrences,
+    ),
+    userSmartGroupingWindow: normalizeSmartGroupingWindow(
+      s.userSmartGroupingWindow ?? s.smartGroupingWindow,
+    ),
     channels: s.channels,
+  };
+}
+
+export type SmartGroupingLockSource = 'organization' | 'workspace' | null;
+
+export type SmartGroupingViewState = {
+  occurrences: SmartGroupingOccurrences;
+  window: SmartGroupingWindow;
+  valuesReadOnly: boolean;
+  lockEngaged: boolean;
+  canToggleLock: boolean;
+  lockInheritedFrom: SmartGroupingLockSource;
+};
+
+function resolveOrgSmartGrouping() {
+  const org = loadOrgNotificationSettings();
+  if (!org) return null;
+  return {
+    occurrences: normalizeSmartGroupingOccurrences(org.smartGroupingOccurrences),
+    window: normalizeSmartGroupingWindow(org.smartGroupingWindow),
+    locked: org.smartGroupingLocked === true,
+  };
+}
+
+/** Workspace policy tab — workspace admin view */
+export function getWorkspacePolicySmartGroupingState(): SmartGroupingViewState {
+  const ws = getWorkspaceSavedState();
+  const org = resolveOrgSmartGrouping();
+
+  if (org?.locked) {
+    return {
+      occurrences: org.occurrences,
+      window: org.window,
+      valuesReadOnly: true,
+      lockEngaged: true,
+      canToggleLock: false,
+      lockInheritedFrom: 'organization',
+    };
+  }
+
+  if (org) {
+    return {
+      occurrences: ws.smartGroupingOccurrences,
+      window: ws.smartGroupingWindow,
+      valuesReadOnly: false,
+      lockEngaged: ws.smartGroupingLocked,
+      canToggleLock: true,
+      lockInheritedFrom: null,
+    };
+  }
+
+  return {
+    occurrences: ws.smartGroupingOccurrences,
+    window: ws.smartGroupingWindow,
+    valuesReadOnly: false,
+    lockEngaged: ws.smartGroupingLocked,
+    canToggleLock: true,
+    lockInheritedFrom: null,
+  };
+}
+
+/** My preferences tab — end user view */
+export function getUserSmartGroupingState(): SmartGroupingViewState {
+  const ws = getWorkspaceSavedState();
+  const org = resolveOrgSmartGrouping();
+
+  if (org?.locked) {
+    return {
+      occurrences: org.occurrences,
+      window: org.window,
+      valuesReadOnly: true,
+      lockEngaged: true,
+      canToggleLock: false,
+      lockInheritedFrom: 'organization',
+    };
+  }
+
+  if (ws.smartGroupingLocked) {
+    return {
+      occurrences: ws.smartGroupingOccurrences,
+      window: ws.smartGroupingWindow,
+      valuesReadOnly: true,
+      lockEngaged: true,
+      canToggleLock: false,
+      lockInheritedFrom: 'workspace',
+    };
+  }
+
+  return {
+    occurrences: ws.userSmartGroupingOccurrences,
+    window: ws.userSmartGroupingWindow,
+    valuesReadOnly: false,
+    lockEngaged: false,
+    canToggleLock: false,
+    lockInheritedFrom: null,
+  };
+}
+
+/** Organization admin view */
+export function getOrgSmartGroupingState(): SmartGroupingViewState {
+  const org = resolveOrgSmartGrouping();
+  const occurrences = org?.occurrences ?? '3';
+  const window = org?.window ?? '5 minutes';
+  return {
+    occurrences,
+    window,
+    valuesReadOnly: false,
+    lockEngaged: org?.locked ?? false,
+    canToggleLock: true,
+    lockInheritedFrom: null,
+  };
+}
+
+/** User/workspace settings — org policy cascades into smart grouping + workspace policy channels */
+export function getInitialNotificationSettingsState(): {
+  smartGroupingOccurrences: SmartGroupingOccurrences;
+  smartGroupingWindow: SmartGroupingWindow;
+  channels: NotifChannelState;
+  orgPolicyActive: boolean;
+} {
+  const ws = getWorkspaceSavedState();
+  const org = loadOrgNotificationSettings();
+  if (!org) {
+    return { ...ws, orgPolicyActive: false };
+  }
+  return {
+    smartGroupingOccurrences: normalizeSmartGroupingOccurrences(org.smartGroupingOccurrences),
+    smartGroupingWindow: normalizeSmartGroupingWindow(org.smartGroupingWindow),
+    channels: org.enforced ? org.channels : mergeChannelsWithDefaults({ ...org.channels, ...ws.channels }),
+    orgPolicyActive: true,
   };
 }
 
@@ -176,12 +381,13 @@ export function saveQuickEnablePillar(pillarId: NotifPillar): void {
   const saved = loadSavedNotificationSettings();
   const base = mergeChannelsWithDefaults(saved?.channels);
   const channels = enablePillarInApp(base, pillarId);
-  const throttleRaw = saved?.throttleInterval ?? '10 min';
-  const throttle: string = THROTTLE_OPTIONS.includes(throttleRaw as ThrottleInterval) ? throttleRaw : '10 min';
   saveNotificationSettings({
     version: 1,
-    criticalBypass: saved?.criticalBypass ?? true,
-    throttleInterval: throttle,
+    smartGroupingOccurrences: saved?.smartGroupingOccurrences ?? '3',
+    smartGroupingWindow: saved?.smartGroupingWindow ?? '5 minutes',
+    smartGroupingLocked: saved?.smartGroupingLocked,
+    userSmartGroupingOccurrences: saved?.userSmartGroupingOccurrences,
+    userSmartGroupingWindow: saved?.userSmartGroupingWindow,
     channels,
   });
   if (typeof window !== 'undefined') {

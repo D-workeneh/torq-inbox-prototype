@@ -4,6 +4,7 @@ const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
+const CLOCK_AFTER_MS = 3 * HOUR_MS;
 
 export type Phase1InboxTimeSection = 'today' | 'thisWeek' | 'older';
 
@@ -17,6 +18,27 @@ function startOfLocalDay(d: Date): number {
   const copy = new Date(d);
   copy.setHours(0, 0, 0, 0);
   return copy.getTime();
+}
+
+function formatClockTime(d: Date): string {
+  return d.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function formatMonthDayTime(d: Date): string {
+  const date = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+  return `${date}, ${formatClockTime(d)}`;
+}
+
+function formatWeekdayTime(d: Date): string {
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${weekday}, ${formatClockTime(d)}`;
 }
 
 export function getPhase1InboxTimeSection(
@@ -37,14 +59,15 @@ function formatTodayTimestamp(occurredAt: Date, diffMs: number): string {
     return minutes === 1 ? '1 min ago' : `${minutes} min ago`;
   }
 
-  return occurredAt.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  if (diffMs < CLOCK_AFTER_MS) {
+    const hours = Math.floor(diffMs / HOUR_MS);
+    return hours === 1 ? '1h ago' : `${hours}h ago`;
+  }
+
+  return formatClockTime(occurredAt);
 }
 
-/** Inbox row timestamp — SOC-friendly for today; relative for this week; "Apr 20" when older */
+/** Inbox row timestamp — relative for today; "Mon 09:48" this week; "Jun 7, 09:12" when older */
 export function formatPhase1InboxTimestamp(occurredAt: Date, now: Date = new Date()): string {
   const diffMs = Math.max(0, now.getTime() - occurredAt.getTime());
   const section = getPhase1InboxTimeSection(occurredAt, now);
@@ -53,18 +76,11 @@ export function formatPhase1InboxTimestamp(occurredAt: Date, now: Date = new Dat
     return formatTodayTimestamp(occurredAt, diffMs);
   }
 
-  if (section === 'older') {
-    return occurredAt.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+  if (section === 'thisWeek') {
+    return formatWeekdayTime(occurredAt);
   }
 
-  if (diffMs >= 2 * DAY_MS) {
-    return `${Math.floor(diffMs / DAY_MS)}d`;
-  }
-
-  return 'Yesterday';
+  return formatMonthDayTime(occurredAt);
 }
 
 export function groupPhase1InboxRows(

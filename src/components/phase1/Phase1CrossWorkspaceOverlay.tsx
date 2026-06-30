@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { APP_WORKSPACES } from '@/lib/appNavConfig';
+import { PHASE1_LAYOUT_TOP_OFFSET } from './phase1LayoutConstants';
 import { getCrossWorkspaceOverlayLoadMs } from './loading/simulatedLoadTiming';
 import { TorqPixelLoader } from './loading/TorqPixelLoader';
 import { p1Font, p1Text } from './phase1Typography';
@@ -36,42 +37,12 @@ export function Phase1CrossWorkspaceOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-[200] flex flex-col bg-[#F3F4F6]"
+      className="fixed right-0 bottom-0 left-0 z-[200] flex flex-col bg-white"
+      style={{ top: PHASE1_LAYOUT_TOP_OFFSET }}
       role="status"
       aria-live="polite"
       aria-label={`Opening ${ws.name} in a new tab`}
     >
-      <div
-        className="flex shrink-0 items-end gap-1 border-b border-[#E5E7EB] bg-[#E8EAED] px-3 pt-2"
-        style={{ minHeight: 40 }}
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 14, scale: 0.92 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="flex max-w-[220px] items-center gap-2 rounded-t-lg border border-b-0 border-[#D1D5DB] bg-white px-3 py-2 shadow-sm"
-        >
-          <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-bold text-white"
-            style={{ backgroundColor: ws.color }}
-            aria-hidden
-          >
-            {letter}
-          </span>
-          <span
-            className="truncate text-[length:var(--font-size-body2)] font-medium text-[var(--text-primary)]"
-            style={{ fontFamily: p1Font.family }}
-          >
-            {ws.name}
-          </span>
-          <span
-            className="ml-1 h-2 w-2 shrink-0 rounded-full bg-[var(--text-primary)]"
-            aria-hidden
-          />
-        </motion.div>
-        <div className="mb-1 h-8 w-24 rounded-t-md border border-b-0 border-transparent bg-[#DDE1E6] opacity-60" />
-      </div>
-
       <div className="relative flex flex-1 flex-col items-center justify-center bg-white">
         {phase === 'loading' && (
           <motion.div

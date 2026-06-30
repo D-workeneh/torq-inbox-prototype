@@ -7,6 +7,8 @@ export type Phase1SkeletonVariant =
   | 'workflows-designer'
   | 'cases-list'
   | 'cases-detail'
+  | 'integrations-list'
+  | 'integrations-detail'
   | 'generic';
 
 function Block({
@@ -177,6 +179,75 @@ function CasesDetailSkeleton() {
   );
 }
 
+function IntegrationsListSkeleton() {
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: '24px 24px 0',
+        }}
+      >
+        <Block style={{ width: 120, height: 28 }} />
+        <Block style={{ width: 72, height: 32, borderRadius: 6 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '24px 24px 16px' }}>
+        <Block style={{ width: 200, height: 28, borderRadius: 6 }} />
+        <Block style={{ width: 88, height: 28, borderRadius: 6 }} />
+        <Block style={{ width: 88, height: 28, borderRadius: 6 }} />
+        <Block style={{ width: 100, height: 28, borderRadius: 6 }} />
+      </div>
+      <div style={{ padding: '0 24px 8px' }}>
+        <Block style={{ width: 80, height: 20 }} />
+        <Block style={{ width: 280, height: 14, marginTop: 8 }} />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          padding: '0 24px 24px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+          gap: 12,
+          alignContent: 'start',
+        }}
+      >
+        {Array.from({ length: 24 }).map((_, i) => (
+          <Block key={i} style={{ height: 88, borderRadius: 8, animationDelay: `${(i % 6) * 0.06}s` }} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function IntegrationsDetailSkeleton() {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 24px 0' }}>
+        <Block style={{ width: 64, height: 18 }} />
+        <Block style={{ width: 24, height: 24, borderRadius: 4 }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '24px 24px 16px', gap: 24 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flex: 1 }}>
+          <Block style={{ width: 40, height: 40, borderRadius: 8 }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Block style={{ width: 180, height: 24 }} />
+            <Block style={{ width: '90%', height: 14 }} />
+            <Block style={{ width: '75%', height: 14 }} />
+          </div>
+        </div>
+        <Block style={{ width: 100, height: 32, borderRadius: 6, flexShrink: 0 }} />
+      </div>
+      <div style={{ flex: 1, padding: '0 24px 24px' }}>
+        <Block style={{ height: 36, marginBottom: 8 }} />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Block key={i} style={{ height: 44, marginBottom: 4, animationDelay: `${i * 0.05}s` }} />
+        ))}
+      </div>
+    </>
+  );
+}
+
 function GenericSkeleton() {
   return (
     <>
@@ -200,6 +271,8 @@ export function Phase1PageSkeleton({ variant }: { variant: Phase1SkeletonVariant
       {variant === 'workflows' && <WorkflowsSkeleton />}
       {variant === 'workflows-designer' && <WorkflowsDesignerSkeleton />}
       {variant === 'cases-detail' && <CasesDetailSkeleton />}
+      {variant === 'integrations-list' && <IntegrationsListSkeleton />}
+      {variant === 'integrations-detail' && <IntegrationsDetailSkeleton />}
       {variant === 'generic' && <GenericSkeleton />}
     </div>
   );
@@ -209,10 +282,13 @@ export function resolvePhase1SkeletonVariant(
   pageId: string,
   caseKey: string | null,
   workflowName: string | null,
+  integrationName: string | null = null,
 ): Phase1SkeletonVariant {
   if (pageId === 'workflows' && workflowName) return 'workflows-designer';
   if (pageId === 'workflows') return 'workflows';
   if (pageId === 'cases' && caseKey) return 'cases-detail';
   if (pageId === 'cases') return 'cases-list';
+  if (pageId === 'integrations' && integrationName) return 'integrations-detail';
+  if (pageId === 'integrations') return 'integrations-list';
   return 'generic';
 }
