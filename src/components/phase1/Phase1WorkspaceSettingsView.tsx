@@ -37,7 +37,7 @@ function SettingsTabBar({
   onChange: (tab: WorkspaceSettingsTab) => void;
 }) {
   return (
-    <div className="flex gap-8 border-b border-[var(--border-level-1)] px-6">
+    <div className="flex gap-8 px-6">
       {TABS.map((tab) => {
         const isActive = active === tab.id;
         return (
@@ -146,21 +146,24 @@ export function Phase1WorkspaceSettingsView({
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--surface)] font-[family-name:var(--font-family)]">
       <SettingsTabBar active={activeTab} onChange={handleTabChange} />
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-8">
-        {activeTab === 'general' && <GeneralSettingsTab />}
-        {activeTab === 'users' && (
-          <div className="mx-auto w-full max-w-4xl">
-            <UsersSettingsContent />
-          </div>
-        )}
-        {activeTab === 'notifications' && (
+      {activeTab === 'notifications' ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
           <WorkspaceNotificationPolicyContent ref={notificationsPolicyRef} />
-        )}
-        {activeTab === 'security' && <PlaceholderTab title="Security" />}
-        {activeTab === 'log-export' && <PlaceholderTab title="Log Export" />}
-        {activeTab === 'cases' && <PlaceholderTab title="Cases" />}
-        {activeTab === 'socrates-tools' && <PlaceholderTab title="Socrates Tools" />}
-      </div>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-8">
+          {activeTab === 'general' && <GeneralSettingsTab />}
+          {activeTab === 'users' && (
+            <div className="mx-auto w-full max-w-4xl">
+              <UsersSettingsContent />
+            </div>
+          )}
+          {activeTab === 'security' && <PlaceholderTab title="Security" />}
+          {activeTab === 'log-export' && <PlaceholderTab title="Log Export" />}
+          {activeTab === 'cases' && <PlaceholderTab title="Cases" />}
+          {activeTab === 'socrates-tools' && <PlaceholderTab title="Socrates Tools" />}
+        </div>
+      )}
     </main>
   );
 }

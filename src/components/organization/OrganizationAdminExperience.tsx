@@ -79,13 +79,11 @@ export function OrganizationAdminExperience({
               title="Notifications"
               description="Set organization-wide notification policies. These apply to all workspaces and users unless overridden at a lower level."
             />
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <NotificationPolicyContent
-                ref={notificationsPolicyRef}
-                scope="organization"
-                showHeader={false}
-              />
-            </div>
+            <NotificationPolicyContent
+              ref={notificationsPolicyRef}
+              scope="organization"
+              showHeader={false}
+            />
           </div>
         )}
         {currentPage === 'cases-dashboards' && <PlaceholderPage title="Cases Dashboards" />}

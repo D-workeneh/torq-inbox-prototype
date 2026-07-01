@@ -502,8 +502,15 @@ export const NotificationPolicyContent = forwardRef<
     ? 'Enforcing preferences overrides workspace and user settings. Affected workspaces and users will see it as locked.'
     : 'Enforcing preferences overrides any conflicting user setting. Users will see it as locked.';
 
+  const contentPaddingX = isOrg ? 'px-8' : 'px-6';
+  const contentPaddingTop = isOrg ? 'pt-6' : 'pt-8';
+
   return (
-    <div className={`mx-auto w-full max-w-3xl space-y-6 ${isDirty ? 'max-md:pb-24' : ''}`}>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      <div
+        className={`mx-auto w-full max-w-3xl min-h-0 flex-1 overflow-y-auto pb-6 ${contentPaddingX} ${contentPaddingTop}`}
+      >
+        <div className="space-y-6">
       {showHeader && (
         <div>
           <h2 className="text-[length:var(--font-size-h3)] font-normal text-[var(--text-primary)]">
@@ -584,22 +591,17 @@ export const NotificationPolicyContent = forwardRef<
           </div>
         ))}
       </SettingsCard>
-
-      {isDirty && (
-        <div className="hidden pb-2 md:block">
-          <PolicyUnsavedChangesBar onDiscard={discardChanges} onSave={() => setSaveConfirmOpen(true)} />
         </div>
-      )}
+      </div>
 
       {isDirty && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border-level-2)] bg-[var(--surface)] px-4 py-3 shadow-[0_-4px_16px_rgba(9,10,11,0.08)] md:hidden">
-          <div className="mx-auto w-full max-w-3xl">
-            <PolicyUnsavedChangesBar
-              messageClassName="text-[length:var(--font-size-body2)]"
-              onDiscard={discardChanges}
-              onSave={() => setSaveConfirmOpen(true)}
-            />
-          </div>
+        <div
+          className={`shrink-0 w-full border-t border-[var(--border-level-2)] bg-[var(--surface)] py-3 shadow-[0_-4px_16px_rgba(9,10,11,0.08)] ${contentPaddingX}`}
+        >
+          <PolicyUnsavedChangesBar
+            onDiscard={discardChanges}
+            onSave={() => setSaveConfirmOpen(true)}
+          />
         </div>
       )}
 
