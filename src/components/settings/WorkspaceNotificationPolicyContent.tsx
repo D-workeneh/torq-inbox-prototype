@@ -596,7 +596,7 @@ export const NotificationPolicyContent = forwardRef<
 
       {isDirty && (
         <div
-          className={`shrink-0 w-full border-t border-[var(--border-level-2)] bg-[var(--surface)] py-3 shadow-[0_-4px_16px_rgba(9,10,11,0.08)] ${contentPaddingX}`}
+          className={`mx-auto w-full max-w-3xl shrink-0 bg-[var(--surface)] py-3 ${contentPaddingX}`}
         >
           <PolicyUnsavedChangesBar
             onDiscard={discardChanges}
