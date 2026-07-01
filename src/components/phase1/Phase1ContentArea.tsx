@@ -1,5 +1,6 @@
 'use client';
 
+import type { RefObject } from 'react';
 import { Workflow } from 'lucide-react';
 import { APP_NAV_SECTIONS, COMING_SOON_ICONS } from '@/lib/appNavConfig';
 import { getPhase1CaseDetail, PHASE1_CASE_KEYS } from './caseDetails';
@@ -8,6 +9,7 @@ import { Phase1IntegrationsView } from './Phase1IntegrationsView';
 import { Phase1MainContent } from './Phase1MainContent';
 import {
   Phase1WorkspaceSettingsView,
+  type WorkspaceSettingsHandle,
   type WorkspaceSettingsTab,
 } from './Phase1WorkspaceSettingsView';
 import { p1PageTitle } from './phase1Typography';
@@ -53,6 +55,7 @@ export function Phase1ContentArea({
   onIntegrationBack,
   onOpenIntegration,
   settingsTab = 'general',
+  settingsViewRef,
 }: {
   pageId: string;
   caseKey: string | null;
@@ -64,6 +67,7 @@ export function Phase1ContentArea({
   onIntegrationBack?: () => void;
   onOpenIntegration?: (integrationName: string) => void;
   settingsTab?: WorkspaceSettingsTab;
+  settingsViewRef?: RefObject<WorkspaceSettingsHandle | null>;
 }) {
   if (pageId === 'integrations') {
     if (integrationName) {
@@ -98,7 +102,7 @@ export function Phase1ContentArea({
     );
   }
   if (pageId === 'settings') {
-    return <Phase1WorkspaceSettingsView initialTab={settingsTab} />;
+    return <Phase1WorkspaceSettingsView ref={settingsViewRef} initialTab={settingsTab} />;
   }
   return <Phase1ComingSoon pageId={pageId} />;
 }

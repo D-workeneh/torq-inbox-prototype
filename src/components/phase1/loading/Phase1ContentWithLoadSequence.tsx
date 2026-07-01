@@ -1,9 +1,10 @@
 'use client';
 
+import type { RefObject } from 'react';
 import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Phase1ContentArea } from '../Phase1ContentArea';
-import type { WorkspaceSettingsTab } from '../Phase1WorkspaceSettingsView';
+import type { WorkspaceSettingsHandle, WorkspaceSettingsTab } from '../Phase1WorkspaceSettingsView';
 import { Phase1PageSkeleton, resolvePhase1SkeletonVariant } from './Phase1PageSkeleton';
 import { TorqPixelLoader } from './TorqPixelLoader';
 import type { SimulatedLoadProfile } from './simulatedLoadTiming';
@@ -22,6 +23,7 @@ export function Phase1ContentWithLoadSequence({
   onIntegrationBack,
   onOpenIntegration,
   settingsTab = 'general',
+  settingsViewRef,
 }: {
   pageId: string;
   caseKey: string | null;
@@ -35,6 +37,7 @@ export function Phase1ContentWithLoadSequence({
   onIntegrationBack?: () => void;
   onOpenIntegration?: (integrationName: string) => void;
   settingsTab?: WorkspaceSettingsTab;
+  settingsViewRef?: RefObject<WorkspaceSettingsHandle | null>;
 }) {
   if (pageId === 'settings') {
     return (
@@ -50,6 +53,7 @@ export function Phase1ContentWithLoadSequence({
           onIntegrationBack={onIntegrationBack}
           onOpenIntegration={onOpenIntegration}
           settingsTab={settingsTab}
+          settingsViewRef={settingsViewRef}
         />
       </div>
     );

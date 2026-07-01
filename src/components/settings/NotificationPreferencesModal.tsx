@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, Mail, Monitor, X } from 'lucide-react';
+import { Bell, CircleCheck, Loader2, Mail, Monitor, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { NotifChannelHeaderCell } from '@/components/settings/NotifChannelHeaderCell';
 import { SettingsCard } from '@/components/settings/SettingsPrimitives';
@@ -25,6 +25,42 @@ import {
 } from '@/lib/notificationPreferencesModalStorage';
 
 const CHANNEL_GRID = 'grid grid-cols-[minmax(0,1fr)_104px_104px] items-center';
+
+type NotifPrefSaveStatus = 'idle' | 'saving' | 'saved';
+
+const SAVING_MIN_MS = 400;
+const SAVED_VISIBLE_MS = 2000;
+
+function NotifPrefAutosaveStatus({ status }: { status: NotifPrefSaveStatus }) {
+  return (
+    <AnimatePresence mode="wait">
+      {status !== 'idle' && (
+        <motion.div
+          key={status}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          aria-live="polite"
+          aria-atomic="true"
+          className="flex items-center gap-1.5 text-[length:var(--font-size-body2)] text-[var(--text-tertiary)]"
+        >
+          {status === 'saving' ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} aria-hidden />
+              <span>Saving...</span>
+            </>
+          ) : (
+            <>
+              <CircleCheck className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              <span>Saved</span>
+            </>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 function EnforcedCheckboxCell({
   checked,
@@ -100,11 +136,45 @@ export function NotificationPreferencesModal({
   const [effectivePolicy, setEffectivePolicy] = useState<NotifPrefWorkspacePolicy>(() =>
     getEffectiveNotifPolicy(),
   );
+  const [saveStatus, setSaveStatus] = useState<NotifPrefSaveStatus>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingStartedAtRef = useRef<number | null>(null);
+
+  function clearSaveStatusTimers() {
+    if (saveStatusTimerRef.current) {
+      clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = null;
+    }
+  }
+
+  function markSaving() {
+    clearSaveStatusTimers();
+    savingStartedAtRef.current = Date.now();
+    setSaveStatus('saving');
+  }
+
+  function markSaved() {
+    const elapsed = Date.now() - (savingStartedAtRef.current ?? Date.now());
+    const delay = Math.max(0, SAVING_MIN_MS - elapsed);
+
+    clearSaveStatusTimers();
+    saveStatusTimerRef.current = setTimeout(() => {
+      setSaveStatus('saved');
+      saveStatusTimerRef.current = setTimeout(() => {
+        setSaveStatus('idle');
+        saveStatusTimerRef.current = null;
+      }, SAVED_VISIBLE_MS);
+    }, delay);
+  }
+
+  useEffect(() => () => clearSaveStatusTimers(), []);
 
   useEffect(() => {
     if (open) {
       setEffectivePolicy(getEffectiveNotifPolicy());
       setPrefs(loadNotifPrefUserState());
+      setSaveStatus('idle');
+      clearSaveStatusTimers();
     }
   }, [open]);
 
@@ -133,6 +203,7 @@ export function NotificationPreferencesModal({
   function toggleChannel(id: NotifPrefCategoryId, channel: NotifPrefChannelKey) {
     if (effectivePolicy[id][channel].locked) return;
 
+    markSaving();
     setPrefs((prev) => {
       const next = {
         ...prev,
@@ -142,6 +213,7 @@ export function NotificationPreferencesModal({
         },
       };
       saveNotifPrefUserState(next);
+      markSaved();
       return next;
     });
   }
@@ -166,14 +238,17 @@ export function NotificationPreferencesModal({
         aria-modal="true"
         aria-labelledby="notification-preferences-title"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close notification preferences"
-          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)]"
-        >
-          <X className="h-4 w-4" strokeWidth={1.75} />
-        </button>
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-6">
+          <NotifPrefAutosaveStatus status={saveStatus} />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close notification preferences"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover-level-2)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        </div>
 
         <div className="px-6 pb-8 pt-6">
           <h2

@@ -124,14 +124,14 @@ function NotificationPolicySaveConfirmModal({
 
 function NotificationPolicyLeaveConfirmModal({
   open,
-  onStay,
+  onDismiss,
+  onStayAndSave,
   onDiscard,
-  onSave,
 }: {
   open: boolean;
-  onStay: () => void;
+  onDismiss: () => void;
+  onStayAndSave: () => void;
   onDiscard: () => void;
-  onSave: () => void;
 }) {
   if (!open || typeof document === 'undefined') return null;
 
@@ -145,7 +145,7 @@ function NotificationPolicyLeaveConfirmModal({
         type="button"
         aria-label="Dismiss"
         className="absolute inset-0 bg-black/40"
-        onClick={onStay}
+        onClick={onDismiss}
       />
       <div
         role="dialog"
@@ -158,21 +158,17 @@ function NotificationPolicyLeaveConfirmModal({
           id="notif-policy-leave-title"
           className="text-[length:var(--font-size-h4)] font-bold text-[var(--text-primary)]"
         >
-          Discard unsaved changes?
+          You have unsaved changes
         </h2>
         <p className="mt-3 text-[length:var(--font-size-body1)] leading-relaxed text-[var(--text-secondary)]">
-          You have unsaved notification policy changes. Leaving this page will discard them unless
-          you save first.
+          Leave without saving? Your changes to notification settings will be lost.
         </p>
         <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <Button theme="third" size="small" onClick={onStay}>
-            Keep editing
-          </Button>
           <Button theme="third" size="small" onClick={onDiscard}>
             Discard changes
           </Button>
-          <Button theme="primary" size="medium" onClick={onSave}>
-            Save changes
+          <Button theme="primary" size="medium" onClick={onStayAndSave}>
+            Stay and save
           </Button>
         </div>
       </div>
@@ -367,7 +363,6 @@ export const NotificationPolicyContent = forwardRef<
   const [savedToastMsg, setSavedToastMsg] = useState<string | null>(null);
   const savedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingLeaveRef = useRef<(() => void) | null>(null);
-  const leaveAfterSaveRef = useRef(false);
 
   const isDirty = !policiesEqual(policy, savedPolicy);
 
@@ -434,13 +429,6 @@ export const NotificationPolicyContent = forwardRef<
     showSavedToast(
       isOrg ? 'Organization notification policy saved' : 'Workspace notification policy saved',
     );
-
-    if (leaveAfterSaveRef.current) {
-      leaveAfterSaveRef.current = false;
-      const onLeave = pendingLeaveRef.current;
-      pendingLeaveRef.current = null;
-      onLeave?.();
-    }
   }
 
   function discardChanges() {
@@ -449,23 +437,21 @@ export const NotificationPolicyContent = forwardRef<
 
   function stayOnPage() {
     pendingLeaveRef.current = null;
-    leaveAfterSaveRef.current = false;
     setLeaveConfirmOpen(false);
+  }
+
+  function stayAndSave() {
+    pendingLeaveRef.current = null;
+    setLeaveConfirmOpen(false);
+    setSaveConfirmOpen(true);
   }
 
   function discardAndLeave() {
     discardChanges();
     const onLeave = pendingLeaveRef.current;
     pendingLeaveRef.current = null;
-    leaveAfterSaveRef.current = false;
     setLeaveConfirmOpen(false);
     onLeave?.();
-  }
-
-  function saveAndLeave() {
-    setLeaveConfirmOpen(false);
-    leaveAfterSaveRef.current = true;
-    setSaveConfirmOpen(true);
   }
 
   function toggleEnabled(id: NotifPrefCategoryId, channel: NotifPrefChannelKey) {
@@ -608,21 +594,15 @@ export const NotificationPolicyContent = forwardRef<
       <NotificationPolicySaveConfirmModal
         open={saveConfirmOpen}
         scope={scope}
-        onCancel={() => {
-          setSaveConfirmOpen(false);
-          if (leaveAfterSaveRef.current) {
-            leaveAfterSaveRef.current = false;
-            setLeaveConfirmOpen(true);
-          }
-        }}
+        onCancel={() => setSaveConfirmOpen(false)}
         onConfirm={() => persistSaved(policy)}
       />
 
       <NotificationPolicyLeaveConfirmModal
         open={leaveConfirmOpen}
-        onStay={stayOnPage}
+        onDismiss={stayOnPage}
+        onStayAndSave={stayAndSave}
         onDiscard={discardAndLeave}
-        onSave={saveAndLeave}
       />
 
       {savedToastMsg && <NotificationPolicySavedToast message={savedToastMsg} />}

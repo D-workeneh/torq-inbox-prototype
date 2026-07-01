@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { CloudUpload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { SettingsCard } from '@/components/settings/SettingsPrimitives';
@@ -122,11 +122,14 @@ function PlaceholderTab({ title }: { title: string }) {
   );
 }
 
-export function Phase1WorkspaceSettingsView({
-  initialTab = 'general',
-}: {
-  initialTab?: WorkspaceSettingsTab;
-}) {
+export type WorkspaceSettingsHandle = {
+  requestLeave: (onLeave: () => void) => void;
+};
+
+export const Phase1WorkspaceSettingsView = forwardRef<
+  WorkspaceSettingsHandle,
+  { initialTab?: WorkspaceSettingsTab }
+>(function Phase1WorkspaceSettingsView({ initialTab = 'general' }, ref) {
   const [activeTab, setActiveTab] = useState<WorkspaceSettingsTab>(initialTab);
   const notificationsPolicyRef = useRef<NotificationPolicyHandle>(null);
 
@@ -141,6 +144,20 @@ export function Phase1WorkspaceSettingsView({
     }
     setActiveTab(tab);
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      requestLeave(onLeave) {
+        if (activeTab === 'notifications') {
+          notificationsPolicyRef.current?.requestLeave(onLeave);
+          return;
+        }
+        onLeave();
+      },
+    }),
+    [activeTab],
+  );
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--surface)] font-[family-name:var(--font-family)]">
@@ -166,7 +183,7 @@ export function Phase1WorkspaceSettingsView({
       )}
     </main>
   );
-}
+});
 
 export function mapTorqSettingsDetailToWorkspaceTab(
   detail: string,

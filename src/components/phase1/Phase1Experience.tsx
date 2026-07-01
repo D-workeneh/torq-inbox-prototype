@@ -13,6 +13,7 @@ import {
 import { NotificationPreferencesModal } from '@/components/settings/NotificationPreferencesModal';
 import {
   mapTorqSettingsDetailToWorkspaceTab,
+  type WorkspaceSettingsHandle,
   type WorkspaceSettingsTab,
 } from '@/components/phase1/Phase1WorkspaceSettingsView';
 import { computePreviewCardPosition } from './computePreviewCardPosition';
@@ -132,6 +133,7 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
   const notifNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionToastTimerRef = useRef<number | null>(null);
+  const settingsViewRef = useRef<WorkspaceSettingsHandle>(null);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
   const activeSession =
@@ -180,17 +182,25 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
 
   const openWorkspaceSettings = useCallback(
     (tab: WorkspaceSettingsTab = 'general') => {
-      setSettingsTab(tab);
-      patchWorkspaceSession(currentWorkspace, {
-        currentPage: 'settings',
-        activeCaseKey: null,
-        activeWorkflowName: null,
-        activeIntegrationName: null,
-      });
-      setInboxOpen(false);
-      clearHoverPreview();
+      const apply = () => {
+        setSettingsTab(tab);
+        patchWorkspaceSession(currentWorkspace, {
+          currentPage: 'settings',
+          activeCaseKey: null,
+          activeWorkflowName: null,
+          activeIntegrationName: null,
+        });
+        setInboxOpen(false);
+        clearHoverPreview();
+      };
+
+      if (currentPage === 'settings') {
+        settingsViewRef.current?.requestLeave(apply);
+        return;
+      }
+      apply();
     },
-    [clearHoverPreview, currentWorkspace, patchWorkspaceSession],
+    [clearHoverPreview, currentPage, currentWorkspace, patchWorkspaceSession],
   );
 
   function navigate(pageId: string) {
@@ -201,6 +211,14 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
       activeIntegrationName: pageId === 'integrations' ? null : activeIntegrationName,
     });
     clearHoverPreview();
+  }
+
+  function guardedNavigate(pageId: string) {
+    if (currentPage === 'settings' && pageId !== 'settings') {
+      settingsViewRef.current?.requestLeave(() => navigate(pageId));
+      return;
+    }
+    navigate(pageId);
   }
 
   function applyFullPageFromNotif(row: Phase1NotifRow, workspaceId = currentWorkspace) {
@@ -503,13 +521,27 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
           onCollapsedChange={setSidebarCollapsed}
           currentWorkspace={currentWorkspace}
           onWorkspaceChange={(workspaceId) => {
-            setCurrentWorkspace(workspaceId);
-            openBrowserTab(workspaceId);
+            const apply = () => {
+              setCurrentWorkspace(workspaceId);
+              openBrowserTab(workspaceId);
+            };
+            if (currentPage === 'settings') {
+              settingsViewRef.current?.requestLeave(apply);
+              return;
+            }
+            apply();
           }}
           onManageOrganization={() => {
-            openInNewBrowserTab('/organization');
-            setInboxOpen(false);
-            clearHoverPreview();
+            const apply = () => {
+              openInNewBrowserTab('/organization');
+              setInboxOpen(false);
+              clearHoverPreview();
+            };
+            if (currentPage === 'settings') {
+              settingsViewRef.current?.requestLeave(apply);
+              return;
+            }
+            apply();
           }}
           onManageNotifications={() => {
             setNotificationPrefsOpen(true);
@@ -518,7 +550,7 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
           }}
           onOpenSettings={() => openWorkspaceSettings('general')}
           currentPage={currentPage}
-          onNavigate={navigate}
+          onNavigate={guardedNavigate}
           inboxOpen={inboxOpen}
           onInboxToggle={() => setInboxOpen((o) => !o)}
           inboxUnreadCount={badge.count}
@@ -562,6 +594,7 @@ export function Phase1Experience({ phase, onPhaseChange }: Phase1ExperienceProps
                       })
                     }
                     settingsTab={settingsTab}
+                    settingsViewRef={settingsViewRef}
                   />
                 </div>
               );
