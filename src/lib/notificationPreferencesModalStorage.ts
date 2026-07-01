@@ -89,7 +89,13 @@ export const NOTIF_PREF_CATEGORIES: NotifPrefCategoryDef[] = [
 ];
 
 export const NOTIF_PREF_ENFORCED_TOOLTIP =
-  'This setting is enforced by your workspace admin.';
+  'This setting is enforced by an admin.';
+
+export const NOTIF_CHANNEL_INAPP_TOOLTIP =
+  'Delivered inside Torq while the member is logged in.';
+
+export const NOTIF_CHANNEL_EMAIL_TOOLTIP =
+  "Sent to the member's registered email address.";
 
 const USER_STORAGE_KEY = 'torq-notification-preferences-modal-v2';
 const WORKSPACE_POLICY_STORAGE_KEY = 'torq-workspace-notification-policy-v2';
@@ -180,6 +186,35 @@ export function saveOrgNotifPolicy(policy: NotifPrefOrgPolicy): void {
   }
 }
 
+/** Org locks take precedence; workspace locks apply when org has not locked. */
+export function mergeOrgWorkspaceNotifPolicies(
+  org: NotifPrefOrgPolicy,
+  workspace: NotifPrefWorkspacePolicy,
+): NotifPrefWorkspacePolicy {
+  const result = buildDefaultWorkspaceNotifPolicy();
+
+  for (const cat of NOTIF_PREF_CATEGORIES) {
+    for (const channel of ['inapp', 'email'] as const) {
+      const orgChannel = org[cat.id][channel];
+      const workspaceChannel = workspace[cat.id][channel];
+
+      if (orgChannel.locked) {
+        result[cat.id][channel] = { enabled: orgChannel.enabled, locked: true };
+      } else if (workspaceChannel.locked) {
+        result[cat.id][channel] = { enabled: workspaceChannel.enabled, locked: true };
+      } else {
+        result[cat.id][channel] = { enabled: workspaceChannel.enabled, locked: false };
+      }
+    }
+  }
+
+  return result;
+}
+
+export function getEffectiveNotifPolicy(): NotifPrefWorkspacePolicy {
+  return mergeOrgWorkspaceNotifPolicies(loadOrgNotifPolicy(), loadWorkspaceNotifPolicy());
+}
+
 export function isWorkspaceChannelLocked(
   policy: NotifPrefWorkspacePolicy,
   id: NotifPrefCategoryId,
@@ -188,59 +223,66 @@ export function isWorkspaceChannelLocked(
   return policy[id][channel].locked;
 }
 
+export function isChannelEnforcedForUser(
+  id: NotifPrefCategoryId,
+  channel: NotifPrefChannelKey,
+): boolean {
+  return getEffectiveNotifPolicy()[id][channel].locked;
+}
+
 export function buildDefaultNotifPrefUserState(): NotifPrefUserState {
-  const policy = buildDefaultWorkspaceNotifPolicy();
+  const workspace = loadWorkspaceNotifPolicy();
   return Object.fromEntries(
     NOTIF_PREF_CATEGORIES.map((cat) => [
       cat.id,
       {
-        inapp: policy[cat.id].inapp.enabled,
-        email: policy[cat.id].email.enabled,
+        inapp: workspace[cat.id].inapp.enabled,
+        email: workspace[cat.id].email.enabled,
       },
     ]),
   ) as NotifPrefUserState;
 }
 
 export function loadNotifPrefUserState(): NotifPrefUserState {
-  const policy = loadWorkspaceNotifPolicy();
+  const effective = getEffectiveNotifPolicy();
   const defaults = buildDefaultNotifPrefUserState();
-  if (typeof window === 'undefined') return defaults;
+  if (typeof window === 'undefined') return mergeUserStateWithPolicy(defaults, effective);
 
   try {
     const raw = window.localStorage.getItem(USER_STORAGE_KEY);
     if (!raw) {
-      return mergeUserStateWithPolicy(defaults, policy);
+      return mergeUserStateWithPolicy(defaults, effective);
     }
     const parsed = JSON.parse(raw) as Partial<NotifPrefUserState>;
     const merged = { ...defaults };
     for (const cat of NOTIF_PREF_CATEGORIES) {
       const saved = parsed[cat.id];
       if (!saved) continue;
-      if (!policy[cat.id].inapp.locked && typeof saved.inapp === 'boolean') {
+      if (!effective[cat.id].inapp.locked && typeof saved.inapp === 'boolean') {
         merged[cat.id].inapp = saved.inapp;
       }
-      if (!policy[cat.id].email.locked && typeof saved.email === 'boolean') {
+      if (!effective[cat.id].email.locked && typeof saved.email === 'boolean') {
         merged[cat.id].email = saved.email;
       }
     }
-    return mergeUserStateWithPolicy(merged, policy);
+    return mergeUserStateWithPolicy(merged, effective);
   } catch {
-    return mergeUserStateWithPolicy(defaults, policy);
+    return mergeUserStateWithPolicy(defaults, effective);
   }
 }
 
 function mergeUserStateWithPolicy(
   state: NotifPrefUserState,
-  policy: NotifPrefWorkspacePolicy,
+  effectivePolicy: NotifPrefWorkspacePolicy,
 ): NotifPrefUserState {
   const next = { ...state };
   for (const cat of NOTIF_PREF_CATEGORIES) {
     next[cat.id] = { ...next[cat.id] };
-    if (policy[cat.id].inapp.locked) {
-      next[cat.id].inapp = policy[cat.id].inapp.enabled;
+    if (effectivePolicy[cat.id].inapp.locked) {
+      next[cat.id].inapp = effectivePolicy[cat.id].inapp.enabled;
     }
-    if (policy[cat.id].email.locked) {
-      next[cat.id].email = policy[cat.id].email.enabled;
+    if (effectivePolicy[cat.id].email.locked) {
+      next[cat.id].email = effectivePolicy[cat.id].email.enabled;
     }
   }
   return next;

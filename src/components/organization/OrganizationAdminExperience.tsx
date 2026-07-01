@@ -1,9 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { NotificationPolicyContent } from '@/components/settings/WorkspaceNotificationPolicyContent';
+import { useRef, useState } from 'react';
+import {
+  NotificationPolicyContent,
+  type NotificationPolicyHandle,
+} from '@/components/settings/WorkspaceNotificationPolicyContent';
 import type { OrgAdminPageId } from '@/lib/organizationAdminConfig';
+import { OrgAdminPageHeader } from './OrgAdminPageHeader';
 import { OrgAdminSidebar } from './OrgAdminSidebar';
+import { OrgRolesView } from './OrgRolesView';
 import { OrgWorkspacesView } from './OrgWorkspacesView';
 
 export interface OrganizationAdminExperienceProps {
@@ -29,6 +34,31 @@ export function OrganizationAdminExperience({
 }: OrganizationAdminExperienceProps) {
   const [currentPage, setCurrentPage] = useState<OrgAdminPageId>(initialPage);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const notificationsPolicyRef = useRef<NotificationPolicyHandle>(null);
+
+  function guardedNavigate(page: OrgAdminPageId) {
+    if (currentPage === 'notifications' && page !== 'notifications') {
+      notificationsPolicyRef.current?.requestLeave(() => setCurrentPage(page));
+      return;
+    }
+    setCurrentPage(page);
+  }
+
+  function guardedBackToWorkspace() {
+    if (currentPage === 'notifications') {
+      notificationsPolicyRef.current?.requestLeave(onBackToWorkspace);
+      return;
+    }
+    onBackToWorkspace();
+  }
+
+  function guardedWorkspaceSelect(workspaceId: string) {
+    if (currentPage === 'notifications') {
+      notificationsPolicyRef.current?.requestLeave(() => onWorkspaceSelect(workspaceId));
+      return;
+    }
+    onWorkspaceSelect(workspaceId);
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[var(--color-surface-primary)]">
@@ -36,28 +66,30 @@ export function OrganizationAdminExperience({
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
-        onBackToWorkspace={onBackToWorkspace}
-        onWorkspaceSelect={onWorkspaceSelect}
+        onNavigate={guardedNavigate}
+        onBackToWorkspace={guardedBackToWorkspace}
+        onWorkspaceSelect={guardedWorkspaceSelect}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {currentPage === 'workspaces' && <OrgWorkspacesView />}
         {currentPage === 'notifications' && (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 border-b border-[var(--color-border-2)] px-8 py-6">
-              <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Notifications</h1>
-              <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
-                Set organization-wide notification policies. These apply to all workspaces and users unless overridden at a lower level.
-              </p>
-            </div>
+            <OrgAdminPageHeader
+              title="Notifications"
+              description="Set organization-wide notification policies. These apply to all workspaces and users unless overridden at a lower level."
+            />
             <div className="flex-1 overflow-y-auto px-8 py-6">
-              <NotificationPolicyContent scope="organization" showHeader={false} />
+              <NotificationPolicyContent
+                ref={notificationsPolicyRef}
+                scope="organization"
+                showHeader={false}
+              />
             </div>
           </div>
         )}
         {currentPage === 'cases-dashboards' && <PlaceholderPage title="Cases Dashboards" />}
-        {currentPage === 'roles' && <PlaceholderPage title="Roles" />}
+        {currentPage === 'roles' && <OrgRolesView />}
       </div>
     </div>
   );

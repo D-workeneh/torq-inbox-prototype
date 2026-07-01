@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CloudUpload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { SettingsCard } from '@/components/settings/SettingsPrimitives';
 import { UsersSettingsContent } from '@/components/settings/UsersSettingsContent';
-import { WorkspaceNotificationPolicyContent } from '@/components/settings/WorkspaceNotificationPolicyContent';
+import {
+  WorkspaceNotificationPolicyContent,
+  type NotificationPolicyHandle,
+} from '@/components/settings/WorkspaceNotificationPolicyContent';
 
 export type WorkspaceSettingsTab =
   | 'general'
@@ -125,14 +128,23 @@ export function Phase1WorkspaceSettingsView({
   initialTab?: WorkspaceSettingsTab;
 }) {
   const [activeTab, setActiveTab] = useState<WorkspaceSettingsTab>(initialTab);
+  const notificationsPolicyRef = useRef<NotificationPolicyHandle>(null);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  function handleTabChange(tab: WorkspaceSettingsTab) {
+    if (activeTab === 'notifications' && tab !== 'notifications') {
+      notificationsPolicyRef.current?.requestLeave(() => setActiveTab(tab));
+      return;
+    }
+    setActiveTab(tab);
+  }
+
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--surface)] font-[family-name:var(--font-family)]">
-      <SettingsTabBar active={activeTab} onChange={setActiveTab} />
+      <SettingsTabBar active={activeTab} onChange={handleTabChange} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--surface)] px-6 py-8">
         {activeTab === 'general' && <GeneralSettingsTab />}
@@ -141,7 +153,9 @@ export function Phase1WorkspaceSettingsView({
             <UsersSettingsContent />
           </div>
         )}
-        {activeTab === 'notifications' && <WorkspaceNotificationPolicyContent />}
+        {activeTab === 'notifications' && (
+          <WorkspaceNotificationPolicyContent ref={notificationsPolicyRef} />
+        )}
         {activeTab === 'security' && <PlaceholderTab title="Security" />}
         {activeTab === 'log-export' && <PlaceholderTab title="Log Export" />}
         {activeTab === 'cases' && <PlaceholderTab title="Cases" />}

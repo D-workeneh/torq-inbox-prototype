@@ -2,17 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, Info, Mail, Monitor, X } from 'lucide-react';
+import { Bell, Mail, Monitor, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { NotifChannelHeaderCell } from '@/components/settings/NotifChannelHeaderCell';
 import { SettingsCard } from '@/components/settings/SettingsPrimitives';
 import {
   NOTIF_PREF_CATEGORIES,
   NOTIF_PREF_ENFORCED_TOOLTIP,
   NOTIF_TABLE_BORDER_CLASS,
   NOTIF_TABLE_OUTER_BORDER_CLASS,
+  NOTIF_CHANNEL_EMAIL_TOOLTIP,
+  NOTIF_CHANNEL_INAPP_TOOLTIP,
+  ORG_NOTIF_POLICY_SAVED_EVENT,
   WORKSPACE_NOTIF_POLICY_SAVED_EVENT,
+  getEffectiveNotifPolicy,
   loadNotifPrefUserState,
-  loadWorkspaceNotifPolicy,
   saveNotifPrefUserState,
   type NotifPrefCategoryId,
   type NotifPrefChannelKey,
@@ -21,23 +25,6 @@ import {
 } from '@/lib/notificationPreferencesModalStorage';
 
 const CHANNEL_GRID = 'grid grid-cols-[minmax(0,1fr)_104px_104px] items-center';
-
-function ChannelHeaderCell({
-  label,
-  icon,
-}: {
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="flex w-[104px] items-center justify-center gap-1.5 justify-self-center">
-      <span className="shrink-0 text-[var(--text-tertiary)]">{icon}</span>
-      <span className="text-[length:var(--font-size-body2)] font-semibold text-[var(--text-tertiary)]">
-        {label}
-      </span>
-    </div>
-  );
-}
 
 function EnforcedCheckboxCell({
   checked,
@@ -110,22 +97,28 @@ export function NotificationPreferencesModal({
   onClose: () => void;
 }) {
   const [prefs, setPrefs] = useState<NotifPrefUserState>(() => loadNotifPrefUserState());
-  const [policy, setPolicy] = useState<NotifPrefWorkspacePolicy>(() => loadWorkspaceNotifPolicy());
+  const [effectivePolicy, setEffectivePolicy] = useState<NotifPrefWorkspacePolicy>(() =>
+    getEffectiveNotifPolicy(),
+  );
 
   useEffect(() => {
     if (open) {
+      setEffectivePolicy(getEffectiveNotifPolicy());
       setPrefs(loadNotifPrefUserState());
-      setPolicy(loadWorkspaceNotifPolicy());
     }
   }, [open]);
 
   useEffect(() => {
     function refreshFromPolicy() {
-      setPolicy(loadWorkspaceNotifPolicy());
+      setEffectivePolicy(getEffectiveNotifPolicy());
       setPrefs(loadNotifPrefUserState());
     }
     window.addEventListener(WORKSPACE_NOTIF_POLICY_SAVED_EVENT, refreshFromPolicy);
-    return () => window.removeEventListener(WORKSPACE_NOTIF_POLICY_SAVED_EVENT, refreshFromPolicy);
+    window.addEventListener(ORG_NOTIF_POLICY_SAVED_EVENT, refreshFromPolicy);
+    return () => {
+      window.removeEventListener(WORKSPACE_NOTIF_POLICY_SAVED_EVENT, refreshFromPolicy);
+      window.removeEventListener(ORG_NOTIF_POLICY_SAVED_EVENT, refreshFromPolicy);
+    };
   }, []);
 
   useEffect(() => {
@@ -138,7 +131,7 @@ export function NotificationPreferencesModal({
   }, [open, onClose]);
 
   function toggleChannel(id: NotifPrefCategoryId, channel: NotifPrefChannelKey) {
-    if (policy[id][channel].locked) return;
+    if (effectivePolicy[id][channel].locked) return;
 
     setPrefs((prev) => {
       const next = {
@@ -182,7 +175,7 @@ export function NotificationPreferencesModal({
           <X className="h-4 w-4" strokeWidth={1.75} />
         </button>
 
-        <div className="px-6 pb-2 pt-6">
+        <div className="px-6 pb-8 pt-6">
           <h2
             id="notification-preferences-title"
             className="text-[length:var(--font-size-h3)] font-normal text-[var(--text-primary)]"
@@ -194,7 +187,7 @@ export function NotificationPreferencesModal({
           </p>
         </div>
 
-        <div className="px-6 py-3">
+        <div className="px-6 pb-6">
           <SettingsCard className={NOTIF_TABLE_OUTER_BORDER_CLASS}>
             <div
               className={`${CHANNEL_GRID} h-20 border-b ${NOTIF_TABLE_BORDER_CLASS} bg-[var(--surface)] px-4`}
@@ -205,13 +198,15 @@ export function NotificationPreferencesModal({
                   Notify me about
                 </span>
               </div>
-              <ChannelHeaderCell
+              <NotifChannelHeaderCell
                 label="In-app"
                 icon={<Monitor className="h-4 w-4" strokeWidth={1.75} />}
+                tooltip={NOTIF_CHANNEL_INAPP_TOOLTIP}
               />
-              <ChannelHeaderCell
+              <NotifChannelHeaderCell
                 label="Email"
                 icon={<Mail className="h-4 w-4" strokeWidth={1.75} />}
+                tooltip={NOTIF_CHANNEL_EMAIL_TOOLTIP}
               />
             </div>
 
@@ -232,33 +227,19 @@ export function NotificationPreferencesModal({
                 </div>
                 <EnforcedCheckboxCell
                   checked={prefs[cat.id].inapp}
-                  locked={policy[cat.id].inapp.locked}
+                  locked={effectivePolicy[cat.id].inapp.locked}
                   onChange={() => toggleChannel(cat.id, 'inapp')}
                   ariaLabel={`${cat.label} — in-app notifications`}
                 />
                 <EnforcedCheckboxCell
                   checked={prefs[cat.id].email}
-                  locked={policy[cat.id].email.locked}
+                  locked={effectivePolicy[cat.id].email.locked}
                   onChange={() => toggleChannel(cat.id, 'email')}
                   ariaLabel={`${cat.label} — email notifications`}
                 />
               </div>
             ))}
           </SettingsCard>
-        </div>
-
-        <div className="px-6 pb-6 pt-2">
-          <div className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-primary-50)] px-4 py-3">
-            <Info
-              className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-primary-500)]"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-            <p className="text-[length:var(--font-size-body2)] leading-snug text-[var(--text-secondary)]">
-              Changes save automatically. To reduce repeated notifications, Torq groups them into
-              a single digest.
-            </p>
-          </div>
         </div>
       </motion.div>
     </div>

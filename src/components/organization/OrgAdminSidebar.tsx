@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { UserProfileMenu, type ProfileMenuUser } from '@/components/shell/UserProfileMenu';
 import {
   BookMarked,
   ChevronDown,
@@ -23,6 +24,14 @@ import {
   type OrgAdminPageId,
   type OrgPickerWorkspace,
 } from '@/lib/organizationAdminConfig';
+
+const ORG_PROFILE_USER: ProfileMenuUser = {
+  name: 'David Workeneh',
+  role: 'Organization Admin',
+  email: 'david.workeneh@torq.io',
+  initials: 'D',
+  avatarColor: '#25272D',
+};
 
 function OrgSidebarTooltip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -278,6 +287,7 @@ export interface OrgAdminSidebarProps {
   onNavigate: (pageId: OrgAdminPageId) => void;
   onBackToWorkspace: () => void;
   onWorkspaceSelect: (workspaceId: string) => void;
+  onManageNotifications?: () => void;
 }
 
 export function OrgAdminSidebar({
@@ -287,11 +297,14 @@ export function OrgAdminSidebar({
   onNavigate,
   onBackToWorkspace,
   onWorkspaceSelect,
+  onManageNotifications,
 }: OrgAdminSidebarProps) {
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [sectionToOpen, setSectionToOpen] = useState<string | null>(null);
   const workspaceBtnRef = useRef<HTMLButtonElement>(null);
+  const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   const sidebarW = collapsed ? ORG_SIDEBAR_WIDTH_COLLAPSED : ORG_SIDEBAR_WIDTH_EXPANDED;
 
@@ -489,8 +502,15 @@ export function OrgAdminSidebar({
               </OrgSidebarTooltip>
             </div>
             <button
+              ref={profileBtnRef}
               type="button"
-              className="mt-1 flex w-full justify-center border-t border-[var(--color-border-1)] px-2 py-2.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                setProfileOpen((o) => !o);
+              }}
+              className={`mt-1 flex w-full justify-center border-t border-[var(--color-border-1)] px-2 py-2.5 transition-colors hover:bg-[var(--color-surface-tertiary)] ${
+                profileOpen ? 'bg-[var(--color-surface-tertiary)]' : ''
+              }`}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white">
                 D
@@ -530,8 +550,15 @@ export function OrgAdminSidebar({
             </div>
 
             <button
+              ref={profileBtnRef}
               type="button"
-              className="flex w-full items-center gap-2 border-t border-[var(--color-border-1)] px-3 py-2.5 transition-colors hover:bg-[var(--color-surface-tertiary)]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setProfileOpen((o) => !o);
+              }}
+              className={`flex w-full items-center gap-2 border-t border-[var(--color-border-1)] px-3 py-2.5 transition-colors hover:bg-[var(--color-surface-tertiary)] ${
+                profileOpen ? 'bg-[var(--color-surface-tertiary)]' : ''
+              }`}
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-neutral-800)] text-[var(--font-size-xs)] font-bold text-white">
                 D
@@ -548,6 +575,17 @@ export function OrgAdminSidebar({
             </button>
           </>
         )}
+
+        <AnimatePresence>
+          {profileOpen && (
+            <UserProfileMenu
+              user={ORG_PROFILE_USER}
+              anchorRef={profileBtnRef}
+              onClose={() => setProfileOpen(false)}
+              onManageNotifications={onManageNotifications}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </motion.aside>
   );

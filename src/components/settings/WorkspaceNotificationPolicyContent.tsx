@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, CircleCheck, Info, Lock, LockOpen, Mail, Monitor } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { SettingsCard } from '@/components/settings/SettingsPrimitives';
+import { NotifChannelHeaderCell } from '@/components/settings/NotifChannelHeaderCell';
 import {
   NOTIF_PREF_CATEGORIES,
   NOTIF_TABLE_BORDER_CLASS,
   NOTIF_TABLE_OUTER_BORDER_CLASS,
+  NOTIF_CHANNEL_EMAIL_TOOLTIP,
+  NOTIF_CHANNEL_INAPP_TOOLTIP,
   ORG_NOTIF_POLICY_SAVED_EVENT,
   WORKSPACE_NOTIF_POLICY_SAVED_EVENT,
   loadOrgNotifPolicy,
@@ -28,6 +31,11 @@ const LOCK_TOOLTIP_ENFORCED = 'Enforced';
 const LOCK_TOOLTIP_OPTIONAL = 'Optional';
 
 export type NotificationPolicyScope = 'workspace' | 'organization';
+
+export type NotificationPolicyHandle = {
+  isDirty: boolean;
+  requestLeave: (onLeave: () => void) => void;
+};
 
 function policiesEqual(a: NotifPrefWorkspacePolicy, b: NotifPrefWorkspacePolicy): boolean {
   for (const cat of NOTIF_PREF_CATEGORIES) {
@@ -114,6 +122,65 @@ function NotificationPolicySaveConfirmModal({
   );
 }
 
+function NotificationPolicyLeaveConfirmModal({
+  open,
+  onStay,
+  onDiscard,
+  onSave,
+}: {
+  open: boolean;
+  onStay: () => void;
+  onDiscard: () => void;
+  onSave: () => void;
+}) {
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10002] flex items-center justify-center p-4"
+      data-notif-policy-leave-modal
+      role="presentation"
+    >
+      <button
+        type="button"
+        aria-label="Dismiss"
+        className="absolute inset-0 bg-black/40"
+        onClick={onStay}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notif-policy-leave-title"
+        className="relative z-[1] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--border-level-2)] bg-[var(--surface)] p-6 shadow-xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="notif-policy-leave-title"
+          className="text-[length:var(--font-size-h4)] font-bold text-[var(--text-primary)]"
+        >
+          Discard unsaved changes?
+        </h2>
+        <p className="mt-3 text-[length:var(--font-size-body1)] leading-relaxed text-[var(--text-secondary)]">
+          You have unsaved notification policy changes. Leaving this page will discard them unless
+          you save first.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button theme="third" size="small" onClick={onStay}>
+            Keep editing
+          </Button>
+          <Button theme="third" size="small" onClick={onDiscard}>
+            Discard changes
+          </Button>
+          <Button theme="primary" size="medium" onClick={onSave}>
+            Save changes
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function NotificationPolicySavedToast({ message }: { message: string }) {
   if (typeof document === 'undefined') return null;
 
@@ -134,6 +201,36 @@ function NotificationPolicySavedToast({ message }: { message: string }) {
       </span>
     </div>,
     document.body,
+  );
+}
+
+function PolicyUnsavedChangesBar({
+  className,
+  messageClassName,
+  onDiscard,
+  onSave,
+}: {
+  className?: string;
+  messageClassName?: string;
+  onDiscard: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-3 ${className ?? ''}`}>
+      <p
+        className={`min-w-0 text-[length:var(--font-size-body1)] text-[var(--text-secondary)] ${messageClassName ?? ''}`}
+      >
+        You have unsaved changes
+      </p>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button theme="secondary" size="medium" onClick={onDiscard}>
+          Discard
+        </Button>
+        <Button theme="primary" size="medium" onClick={onSave}>
+          Save changes
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -207,23 +304,6 @@ function LockActionButton({
   );
 }
 
-function ChannelHeaderCell({
-  label,
-  icon,
-}: {
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="flex w-[104px] items-center justify-center gap-1.5 justify-self-center">
-      <span className="shrink-0 text-[var(--text-tertiary)]">{icon}</span>
-      <span className="text-[length:var(--font-size-body2)] font-semibold text-[var(--text-tertiary)]">
-        {label}
-      </span>
-    </div>
-  );
-}
-
 function AdminChannelCell({
   enabled,
   locked,
@@ -264,13 +344,16 @@ function AdminChannelCell({
   );
 }
 
-export function NotificationPolicyContent({
-  scope = 'workspace',
-  showHeader = scope === 'workspace',
-}: {
-  scope?: NotificationPolicyScope;
-  showHeader?: boolean;
-}) {
+export const NotificationPolicyContent = forwardRef<
+  NotificationPolicyHandle,
+  {
+    scope?: NotificationPolicyScope;
+    showHeader?: boolean;
+  }
+>(function NotificationPolicyContent(
+  { scope = 'workspace', showHeader = scope === 'workspace' },
+  ref,
+) {
   const isOrg = scope === 'organization';
   const loadPolicy = isOrg ? loadOrgNotifPolicy : loadWorkspaceNotifPolicy;
   const savePolicy = isOrg ? saveOrgNotifPolicy : saveWorkspaceNotifPolicy;
@@ -280,10 +363,39 @@ export function NotificationPolicyContent({
   const [savedPolicy, setSavedPolicy] = useState<NotifPrefWorkspacePolicy>(() => loadPolicy());
   const [hoveredRowId, setHoveredRowId] = useState<NotifPrefCategoryId | null>(null);
   const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [savedToastMsg, setSavedToastMsg] = useState<string | null>(null);
   const savedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingLeaveRef = useRef<(() => void) | null>(null);
+  const leaveAfterSaveRef = useRef(false);
 
   const isDirty = !policiesEqual(policy, savedPolicy);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      isDirty,
+      requestLeave(onLeave: () => void) {
+        if (!isDirty) {
+          onLeave();
+          return;
+        }
+        pendingLeaveRef.current = onLeave;
+        setLeaveConfirmOpen(true);
+      },
+    }),
+    [isDirty],
+  );
+
+  useEffect(() => {
+    if (!isDirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   useEffect(() => {
     return () => {
@@ -322,6 +434,38 @@ export function NotificationPolicyContent({
     showSavedToast(
       isOrg ? 'Organization notification policy saved' : 'Workspace notification policy saved',
     );
+
+    if (leaveAfterSaveRef.current) {
+      leaveAfterSaveRef.current = false;
+      const onLeave = pendingLeaveRef.current;
+      pendingLeaveRef.current = null;
+      onLeave?.();
+    }
+  }
+
+  function discardChanges() {
+    setPolicy(savedPolicy);
+  }
+
+  function stayOnPage() {
+    pendingLeaveRef.current = null;
+    leaveAfterSaveRef.current = false;
+    setLeaveConfirmOpen(false);
+  }
+
+  function discardAndLeave() {
+    discardChanges();
+    const onLeave = pendingLeaveRef.current;
+    pendingLeaveRef.current = null;
+    leaveAfterSaveRef.current = false;
+    setLeaveConfirmOpen(false);
+    onLeave?.();
+  }
+
+  function saveAndLeave() {
+    setLeaveConfirmOpen(false);
+    leaveAfterSaveRef.current = true;
+    setSaveConfirmOpen(true);
   }
 
   function toggleEnabled(id: NotifPrefCategoryId, channel: NotifPrefChannelKey) {
@@ -350,8 +494,16 @@ export function NotificationPolicyContent({
     });
   }
 
+  const categoryColumnLabel = isOrg
+    ? 'All workspaces and users'
+    : 'All workspace members';
+
+  const policyInfoMessage = isOrg
+    ? 'Enforcing preferences overrides workspace and user settings. Affected workspaces and users will see it as locked.'
+    : 'Enforcing preferences overrides any conflicting user setting. Users will see it as locked.';
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6">
+    <div className={`mx-auto w-full max-w-3xl space-y-6 ${isDirty ? 'max-md:pb-24' : ''}`}>
       {showHeader && (
         <div>
           <h2 className="text-[length:var(--font-size-h3)] font-normal text-[var(--text-primary)]">
@@ -365,21 +517,34 @@ export function NotificationPolicyContent({
         </div>
       )}
 
+      <div className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-primary-50)] px-4 py-3">
+        <Info
+          className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-primary-500)]"
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        <p className="text-[length:var(--font-size-body2)] leading-snug text-[var(--text-secondary)]">
+          {policyInfoMessage}
+        </p>
+      </div>
+
       <SettingsCard className={NOTIF_TABLE_OUTER_BORDER_CLASS}>
         <div className={`${CHANNEL_GRID} h-20 border-b ${NOTIF_TABLE_BORDER_CLASS} bg-[var(--surface)] px-4`}>
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-[var(--text-tertiary)]" strokeWidth={1.75} />
+          <div className="flex min-w-0 items-center gap-2">
+            <Bell className="h-4 w-4 shrink-0 text-[var(--text-tertiary)]" strokeWidth={1.75} />
             <span className="text-[length:var(--font-size-body2)] font-semibold text-[var(--text-tertiary)]">
-              Notify me about
+              {categoryColumnLabel}
             </span>
           </div>
-          <ChannelHeaderCell
+          <NotifChannelHeaderCell
             label="In-app"
             icon={<Monitor className="h-4 w-4" strokeWidth={1.75} />}
+            tooltip={NOTIF_CHANNEL_INAPP_TOOLTIP}
           />
-          <ChannelHeaderCell
+          <NotifChannelHeaderCell
             label="Email"
             icon={<Mail className="h-4 w-4" strokeWidth={1.75} />}
+            tooltip={NOTIF_CHANNEL_EMAIL_TOOLTIP}
           />
         </div>
 
@@ -420,42 +585,51 @@ export function NotificationPolicyContent({
         ))}
       </SettingsCard>
 
-      <div className="flex items-start gap-3 rounded-[var(--radius-md)] bg-[var(--color-primary-50)] px-4 py-3">
-        <Info
-          className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-primary-500)]"
-          strokeWidth={1.75}
-          aria-hidden
-        />
-        <p className="text-[length:var(--font-size-body2)] leading-snug text-[var(--text-secondary)]">
-          {isOrg
-            ? 'Enforcing preferences overrides workspace and user settings. Affected workspaces and users will see it as locked.'
-            : 'Enforcing preferences overrides any conflicting user setting. Users will see it as locked.'}
-        </p>
-      </div>
+      {isDirty && (
+        <div className="hidden pb-2 md:block">
+          <PolicyUnsavedChangesBar onDiscard={discardChanges} onSave={() => setSaveConfirmOpen(true)} />
+        </div>
+      )}
 
-      <div className="flex justify-end pb-2">
-        <Button
-          theme="primary"
-          size="medium"
-          disabled={!isDirty}
-          onClick={() => setSaveConfirmOpen(true)}
-        >
-          Save changes
-        </Button>
-      </div>
+      {isDirty && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border-level-2)] bg-[var(--surface)] px-4 py-3 shadow-[0_-4px_16px_rgba(9,10,11,0.08)] md:hidden">
+          <div className="mx-auto w-full max-w-3xl">
+            <PolicyUnsavedChangesBar
+              messageClassName="text-[length:var(--font-size-body2)]"
+              onDiscard={discardChanges}
+              onSave={() => setSaveConfirmOpen(true)}
+            />
+          </div>
+        </div>
+      )}
 
       <NotificationPolicySaveConfirmModal
         open={saveConfirmOpen}
         scope={scope}
-        onCancel={() => setSaveConfirmOpen(false)}
+        onCancel={() => {
+          setSaveConfirmOpen(false);
+          if (leaveAfterSaveRef.current) {
+            leaveAfterSaveRef.current = false;
+            setLeaveConfirmOpen(true);
+          }
+        }}
         onConfirm={() => persistSaved(policy)}
+      />
+
+      <NotificationPolicyLeaveConfirmModal
+        open={leaveConfirmOpen}
+        onStay={stayOnPage}
+        onDiscard={discardAndLeave}
+        onSave={saveAndLeave}
       />
 
       {savedToastMsg && <NotificationPolicySavedToast message={savedToastMsg} />}
     </div>
   );
-}
+});
 
-export function WorkspaceNotificationPolicyContent() {
-  return <NotificationPolicyContent scope="workspace" />;
-}
+export const WorkspaceNotificationPolicyContent = forwardRef<NotificationPolicyHandle>(
+  function WorkspaceNotificationPolicyContent(_, ref) {
+    return <NotificationPolicyContent ref={ref} scope="workspace" />;
+  },
+);
