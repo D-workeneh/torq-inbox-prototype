@@ -11,7 +11,7 @@ export type PrototypePhase =
   | 'floating-drawer-read-more'
   | 'notification-builtin-action';
 
-export const PROTOTYPE_PHASE_STORAGE_KEY = 'torq-prototype-phase';
+export const PROTOTYPE_PHASE_STORAGE_KEY = 'torq-prototype-phase-v2';
 
 const PHASE_OPTIONS: {
   id: PrototypePhase;
@@ -46,7 +46,7 @@ const FAB_SHADOW_IDLE = '0 1px 2px rgba(0, 0, 0, 0.05)';
 const FAB_SHADOW_HOVER = '0 10px 28px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.06)';
 
 export function loadPrototypePhase(): PrototypePhase {
-  if (typeof window === 'undefined') return 'floating-drawer-preview';
+  if (typeof window === 'undefined') return 'floating-drawer';
   try {
     const stored = localStorage.getItem(PROTOTYPE_PHASE_STORAGE_KEY);
     if (
@@ -58,11 +58,10 @@ export function loadPrototypePhase(): PrototypePhase {
     ) {
       return stored;
     }
-    if (stored === 'phase-1-floating-drawer') return 'floating-drawer-preview';
   } catch {
     /* ignore */
   }
-  return 'floating-drawer-preview';
+  return 'floating-drawer';
 }
 
 export function savePrototypePhase(phase: PrototypePhase) {

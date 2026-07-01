@@ -11,7 +11,7 @@ import { Phase1Experience } from '@/components/phase1/Phase1Experience';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [phase, setPhase] = useState<PrototypePhase>('floating-drawer-preview');
+  const [phase, setPhase] = useState<PrototypePhase>('floating-drawer');
 
   useEffect(() => {
     setMounted(true);
